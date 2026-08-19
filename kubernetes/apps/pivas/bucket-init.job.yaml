@@ -1,0 +1,29 @@
+# Job de un solo uso: crea el bucket de evidencia en RustFS y aplica su CORS
+# (PUT/GET/HEAD) usando el propio helper de la app. Idempotente: se puede repetir.
+#   kubectl apply -f bucket-init.job.yaml
+#   kubectl -n pivas logs job/pivas-bucket-init
+#   kubectl -n pivas delete job pivas-bucket-init   # limpieza opcional
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pivas-bucket-init
+  namespace: pivas
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: pivas
+        job: bucket-init
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: bucket-init
+          image: ghcr.io/protecso-sac/pivas-fs:latest   # REEMPLAZAR por tu registry/tag
+          imagePullPolicy: Always
+          command: ["/app/bin/pivas", "eval", "Pivas.Storage.ensure_evidence_bucket()"]
+          envFrom:
+            - secretRef:
+                name: pivas-env

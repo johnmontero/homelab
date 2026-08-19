@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pivas
+  namespace: pivas
+  labels:
+    app: pivas
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: pivas
+  strategy:
+    type: Recreate          # release de Phoenix; evita 2 versiones durante migración
+  template:
+    metadata:
+      labels:
+        app: pivas
+    spec:
+      # El clúster es mixto (ZimaBoard amd64 + Jetson arm64). La imagen de release
+      # se construye amd64, así que se fija al nodo amd64 (igual que postgres-dev).
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      # Migraciones antes de arrancar el server (requiere Pivas.Release.migrate/0,
+      # el helper estándar de mix release para Ecto).
+      initContainers:
+        - name: migrate
+          image: ghcr.io/protecso-sac/pivas-fs:latest   # REEMPLAZAR por tu registry/tag
+          imagePullPolicy: Always
+          command: ["/app/bin/pivas", "eval", "Pivas.Release.migrate()"]
+          envFrom:
+            - secretRef:
+                name: pivas-env
+      containers:
+        - name: pivas
+          image: ghcr.io/protecso-sac/pivas-fs:latest    # REEMPLAZAR por tu registry/tag
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: pivas-env
+          ports:
+            - name: http
+              containerPort: 4003
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4003
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      # Si la imagen es privada en GHCR, crear el secret y descomentar:
+      # imagePullSecrets:
+      #   - name: ghcr-creds

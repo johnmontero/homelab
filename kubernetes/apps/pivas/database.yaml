@@ -1,0 +1,19 @@
+# Base de datos dedicada de PIVAS dentro del cluster CNPG de dev (postgres-dev).
+# Se crea de forma declarativa vía el CRD Database de CloudNativePG, propiedad del
+# rol existente `dev_admin` (no crea rol nuevo). PIVAS se conecta a esta base con
+# las credenciales de `dev_admin` (mismas del secret postgres-dev-app), pero con
+# DB_NAME=pivas — aislada de `dev_db`.
+#
+# Alternativa manual (si se prefiere no usar el CRD):
+#   kubectl -n data exec -it postgres-dev-1 -- psql -U postgres \
+#     -c "CREATE DATABASE pivas OWNER dev_admin;"
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: pivas
+  namespace: data
+spec:
+  cluster:
+    name: postgres-dev
+  name: pivas
+  owner: dev_admin

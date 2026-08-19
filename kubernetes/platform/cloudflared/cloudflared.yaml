@@ -1,0 +1,48 @@
+# Cloudflare Tunnel COMPARTIDO del homelab (conector cloudflared).
+#
+# Un único túnel `homelab` expone por HTTPS los servicios del clúster SIN abrir
+# puertos del router. El conector enruta a services de CUALQUIER namespace vía DNS
+# interno, así que todos los proyectos usan este mismo túnel: cada uno solo agrega
+# sus Public Hostnames en el panel (Zero Trust -> Networks -> Tunnels -> homelab).
+#
+# Public Hostnames (se configuran en el panel de Cloudflare):
+#   pivas.nx73.app      ->  http://pivas-service.pivas.svc.cluster.local:4003
+#   pivas-evidence.nx73.app   ->  http://rustfs-service.storage.svc.cluster.local:9000   (exclusivo de PIVAS)
+#   pulse.nx73.app      ->  http://pulse-service.pulse.svc.cluster.local:<puerto>   (cuando aplique)
+#   ...                 ->  (otros proyectos: su propio subdominio -> su service)
+#
+# El token del túnel `homelab` se guarda en el secret cloudflared-token (ns tunnel).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: tunnel
+  labels:
+    app: cloudflared
+spec:
+  replicas: 2                # 2 réplicas para alta disponibilidad del conector
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args: ["tunnel", "--no-autoupdate", "run"]
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: token
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

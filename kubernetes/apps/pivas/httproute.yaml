@@ -1,0 +1,33 @@
+# Ruta interna (LAN) por Envoy Gateway para un health-check rápido en `home.lab`.
+# El acceso externo desde el celular NO pasa por aquí, sino por Cloudflare Tunnel
+# (ver cloudflared.yaml). Nota: en :prod, Phoenix valida el origen del WebSocket
+# contra PHX_HOST (pivas.nx73.app); por eso pivas.home.lab sirve para GET / (salud),
+# pero el LiveView/WSS se prueba por el dominio público.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: pivas
+  namespace: pivas
+spec:
+  hostnames:
+    - pivas.home.lab
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: homelab-gateway
+      namespace: default
+      sectionName: http
+  rules:
+    - backendRefs:
+        - group: ''
+          kind: Service
+          name: pivas-service
+          port: 4003
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+      timeouts:
+        backendRequest: 60s
+        request: 60s

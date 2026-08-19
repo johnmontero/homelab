@@ -1,0 +1,14 @@
+# Token del Cloudflare Tunnel COMPARTIDO `homelab`. NO commitear el valor real.
+# Se obtiene al crear el túnel en el panel (Zero Trust -> Networks -> Tunnels ->
+# Create a tunnel -> nombre: homelab -> Cloudflared). Crear el secret con:
+#
+#   kubectl create secret generic cloudflared-token -n tunnel \
+#     --from-literal=token='<TUNNEL_TOKEN>'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflared-token
+  namespace: tunnel
+type: Opaque
+stringData:
+  token: "REEMPLAZAR"

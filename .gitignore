@@ -7,6 +7,11 @@ kubeconfig
 *.kubeconfig
 .env
 .env.*
+# Tokens de Cloudflare Tunnel y otros tokens sueltos
+*token*
+!*token*.example.yaml
+*.tunel
+cloudflare.token.tunel
 
 # Sistema
 .DS_Store

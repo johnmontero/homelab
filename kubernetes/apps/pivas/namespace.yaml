@@ -1,0 +1,4 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pivas       # PIVAS AI (Phoenix) — app de inspección/valoración de siniestros
