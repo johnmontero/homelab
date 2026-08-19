@@ -47,7 +47,7 @@ kubernetes/
 | CloudNativePG | `cnpg-system` | ✅ | operador v1.30 |
 | RustFS (S3) | `storage` | ✅ | `storage/` |
 | IA (Ollama/LocalAI/Kokoro) | `ai-agents` | ✅ | `ai-agents/` (corren en zimaboard/CPU) |
-| cert-manager + Barman plugin | `cert-manager`/`cnpg-system` | ⏳ | backups (ver `data/`) |
+| cert-manager + Barman plugin | `cert-manager`/`cnpg-system` | ✅ | v1.21.1 / v0.14.0 — backups PITR a RustFS |
 
 ## Orden de aplicación (reinstalar desde cero)
 

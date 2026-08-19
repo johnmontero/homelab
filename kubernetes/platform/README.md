@@ -13,7 +13,8 @@ que viven aquí. Versiones observadas en el clúster actual.
 | **MetalLB** | — | `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml` → luego `metallb/` |
 | **Envoy Gateway** | — | `kubectl apply -f https://github.com/envoyproxy/gateway/releases/download/v1.2.4/install.yaml` → luego `gateway/` |
 | **CloudNativePG** | v1.30 | `kubectl apply -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml` |
-| **cert-manager** | v1.21.1 (pendiente) | requerido por el plugin de backups (ver `../data/`) |
+| **cert-manager** | v1.21.1 | requerido por el Barman Cloud Plugin (backups) |
+| **Barman Cloud Plugin** | v0.14.0 | `kubectl apply -f https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.14.0/manifest.yaml` |
 | **NVIDIA device plugin** | v0.14.0 | `nvidia-device-plugin/daemonset.yaml` (nodeSelector `hardware=jetson`) |
 
 > Ajustar las versiones/URLs a las realmente instaladas antes de reinstalar.

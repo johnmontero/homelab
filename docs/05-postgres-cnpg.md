@@ -27,8 +27,10 @@ Manifiestos: [`../kubernetes/data/`](../kubernetes/data/).
 ## Estado actual
 
 - ✅ `postgres-dev` sano en `zimaboard2`.
-- ✅ `postgres-prod` sano en `jetson-4gb-01`.
-- ⏳ Backups continuos a RustFS: **pendientes** (falta cert-manager + plugin).
+- ✅ `postgres-prod` sano en `jetson-4gb-01` (pod 2/2 con sidecar del WAL archiver).
+- ✅ **Backups a RustFS habilitados**: cert-manager v1.21.1 + Barman Cloud Plugin
+  v0.14.0. `ContinuousArchiving=True`; base backup + WALs verificados en
+  `s3://pg-prod-backups/postgres-prod/{base,wals}/`. `ScheduledBackup` diario 03:00.
 
 ## Operación (runbooks)
 
@@ -61,6 +63,7 @@ procedimiento de upgrade de CNPG o, si no hay datos, recrear.
 ## Backups continuos a RustFS (pendiente de habilitar)
 
 Objetivo: WAL archiving continuo + backup base diario → **RustFS (S3)**, para PITR.
+**Estado: habilitado y verificado** (cert-manager v1.21.1 + Barman Cloud Plugin v0.14.0).
 
 **Requisitos e instalación (una vez):**
 ```bash

@@ -50,13 +50,11 @@ spec:
       cpu: "1"
       memory: 2Gi
 
-  # ── Backups continuos a RustFS (PENDIENTE de habilitar) ──────────────────────
-  # Descomentar cuando estén instalados cert-manager + Barman Cloud Plugin y creado
-  # el ObjectStore `prod-backups` (ver kubernetes/data/backups/). Habilita el
-  # archivado de WAL continuo hacia RustFS (S3). Ver docs/05-postgres-cnpg.md.
-  #
-  # plugins:
-  #   - name: barman-cloud.cloudnative-pg.io
-  #     isWALArchiver: true
-  #     parameters:
-  #       barmanObjectName: prod-backups
+  # ── Backups continuos a RustFS (WAL archiving vía Barman Cloud Plugin) ───────
+  # Requiere cert-manager + plugin instalados y el ObjectStore `prod-backups`
+  # (ver kubernetes/data/backups/ y docs/05-postgres-cnpg.md).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: prod-backups
