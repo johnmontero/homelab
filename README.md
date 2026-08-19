@@ -77,6 +77,7 @@ aloja los servicios propios y la **plataforma de datos PostgreSQL** con
 - [PostgreSQL con CloudNativePG](./docs/05-postgres-cnpg.md) — dev/prod, backups, runbooks.
 - [Nodos Jetson Nano](./docs/06-jetson-nodes.md) — host, k3s agent, GPU/containerd.
 - [Observabilidad](./docs/07-observabilidad.md) — Prometheus, Grafana, Alertmanager, alertas.
+- [Roadmap / Pendientes](./docs/08-roadmap.md) — mejoras identificadas sin implementar.
 - [Solución de problemas](./docs/03-troubleshooting.md)
 
 ## Relación con Cotejo
