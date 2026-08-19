@@ -50,8 +50,18 @@ descubre ConfigMaps con la etiqueta `grafana_dashboard=1` en cualquier namespace
   > `--server-side` es obligatorio: el JSON (~253 KB) supera los 256 KB con la
   > anotación `last-applied` que añade el apply cliente.
 
-Para agregar más dashboards: dejar el `.json` en `dashboards/` y añadirlo a
-`files:` del `kustomization.yaml`.
+- **Node Exporter Full** (uid `rYdddlPWk`, grafana.com ID 1860): CPU, RAM, disco,
+  red y temperatura **por nodo** (los 4, incluidos los Jetson). Versionado en
+  `dashboards/node-exporter-full.json`.
+
+Para agregar más dashboards: dejar el `.json` en `dashboards/` y añadirlo como un
+nuevo bloque en `configMapGenerator` del `kustomization.yaml`, luego re-aplicar con
+`--server-side`.
+
+> **Nota:** no se agregan dashboards de GPU (NVIDIA/Jetson) ni de RustFS porque hoy
+> **no exportan métricas** a Prometheus: el device-plugin no publica utilización de
+> GPU (haría falta DCGM, inviable en Tegra R32.7.6) y RustFS no expone `/metrics`.
+> Serían dashboards vacíos.
 
 ## Acceso a Grafana
 
