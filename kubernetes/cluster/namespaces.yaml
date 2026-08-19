@@ -1,0 +1,16 @@
+# Namespaces propios del homelab (los de plataforma —cnpg-system,
+# envoy-gateway-system, metallb-system, cert-manager— los crean sus instaladores).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data          # PostgreSQL (CloudNativePG): dev/prod
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage       # RustFS (S3-compatible)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-agents     # Ollama, LocalAI, Kokoro-TTS

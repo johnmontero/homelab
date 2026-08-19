@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: localai
+  name: localai
+  namespace: ai-agents
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: localai
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: '2026-08-18T02:16:05-05:00'
+      labels:
+        app: localai
+    spec:
+      containers:
+      - env:
+        - name: THREADS
+          value: '2'
+        - name: MODELS_PATH
+          value: /models
+        - name: DEBUG
+          value: 'true'
+        image: quay.io/go-skynet/local-ai:latest-cpu
+        imagePullPolicy: IfNotPresent
+        name: localai
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            cpu: '2'
+            memory: 3500Mi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /models
+          name: models
+        - mountPath: /models/text-embedding-ada-002.yaml
+          name: model-config
+          subPath: text-embedding-ada-002.yaml
+        - mountPath: /models/whisper-1.yaml
+          name: model-config
+          subPath: whisper-1.yaml
+        - mountPath: /models/qwen2.5-1.5b.yaml
+          name: model-config
+          subPath: qwen2.5-1.5b.yaml
+        - mountPath: /models/karen.yaml
+          name: model-config
+          subPath: karen.yaml
+        - mountPath: /models/tts-1.yaml
+          name: model-config
+          subPath: tts-1.yaml
+        - mountPath: /models/tts-female.yaml
+          name: model-config
+          subPath: tts-female.yaml
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/hostname: zimaboard2
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: localai-models-pvc
+      - configMap:
+          defaultMode: 420
+          name: localai-models-config
+        name: model-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localai-service
+  namespace: ai-agents
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: localai
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: localai-models-pvc
+  namespace: ai-agents
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: local-path
+---
+apiVersion: v1
+data:
+  karen.yaml: "name: karen\nbackend: llama-cpp\ncontext_size: 2048\nthreads: 2\nf16:\
+    \ true\nstopwords:\n  - \"<|im_end|>\"\n  - \"<|im_start|>\"\n  - \"<|endoftext|>\"\
+    \nsystem_prompt: |\n  Eres Karen, la inteligencia artificial t\xE1ctica y asistente\
+    \ integrada de soporte.\n  Tu personalidad es c\xE1lida, calmada, maternal, emp\xE1\
+    tica y altamente t\xE9cnica.\n  Respondes en espa\xF1ol fluido, directo y claro.\n\
+    \  Tus respuestas est\xE1n pensadas para ser le\xEDdas por un sintetizador de\
+    \ voz (TTS): mant\xE9n las respuestas concisas, de 1 a 3 oraciones cuando sea\
+    \ posible, con tono conversacional natural y sin usar asteriscos, vi\xF1etas ni\
+    \ caracteres de formato Markdown pesado.\n  Siempre est\xE1s lista para asistir\
+    \ en diagn\xF3sticos de sistemas, operaciones o soporte en tiempo real.\nparameters:\n\
+    \  model: qwen2.5-1.5b-instruct-q4_k_m.gguf\n  temperature: 0.7\n  top_p: 0.9\n"
+  qwen2.5-1.5b.yaml: "name: qwen2.5-1.5b\nbackend: llama-cpp\ncontext_size: 2048\n\
+    threads: 2\nf16: true\nstopwords:\n  - \"<|im_end|>\"\n  - \"<|im_start|>\"\n\
+    \  - \"<|endoftext|>\"\nparameters:\n  model: qwen2.5-1.5b-instruct-q4_k_m.gguf\n\
+    \  temperature: 0.7\n  top_p: 0.9\n"
+  text-embedding-ada-002.yaml: "name: text-embedding-ada-002\nbackend: llama-cpp\n\
+    embeddings: true\nparameters:\n  model: all-MiniLM-L6-v2-Q4_K_M.gguf\n"
+  tts-1.yaml: "name: tts-1\nbackend: piper\nparameters:\n  model: es_ES-davefx-medium.onnx\n"
+  tts-female.yaml: "name: tts-female\nbackend: piper\nparameters:\n  model: es_MX-claude-high.onnx\n\
+    \  length_scale: 1.0\n  noise_scale: 0.667\n  noise_w: 0.8\n"
+  whisper-1.yaml: "name: whisper-1\nbackend: whisper\nparameters:\n  model: ggml-tiny.bin\n"
+kind: ConfigMap
+metadata:
+  name: localai-models-config
+  namespace: ai-agents

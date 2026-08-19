@@ -74,6 +74,7 @@ aloja los servicios propios y la **plataforma de datos PostgreSQL** con
 - [Acceso remoto con Tailscale](./docs/02-acceso-remoto-tailscale.md)
 - [Clúster Kubernetes (k3s)](./docs/04-kubernetes-cluster.md) — nodos, arquitectura, storage.
 - [PostgreSQL con CloudNativePG](./docs/05-postgres-cnpg.md) — dev/prod, backups, runbooks.
+- [Nodos Jetson Nano](./docs/06-jetson-nodes.md) — host, k3s agent, GPU/containerd.
 - [Solución de problemas](./docs/03-troubleshooting.md)
 
 ## Relación con Cotejo

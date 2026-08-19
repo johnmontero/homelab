@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  annotations:
+    deprecated.daemonset.template.generation: '6'
+  name: nvidia-device-plugin-daemonset
+  namespace: kube-system
+spec:
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      name: nvidia-device-plugin-ds
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: '2026-08-16T23:34:09-05:00'
+      labels:
+        name: nvidia-device-plugin-ds
+    spec:
+      containers:
+      - env:
+        - name: PASS_DEVICE_SPECS
+          value: 'true'
+        - name: FAIL_ON_INIT_ERROR
+          value: 'false'
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: all
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: all
+        image: nvcr.io/nvidia/k8s-device-plugin:v0.14.0
+        imagePullPolicy: IfNotPresent
+        name: nvidia-device-plugin-ctr
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/kubelet/device-plugins
+          name: device-plugin
+        - mountPath: /dev
+          name: dev
+        - mountPath: /sys
+          name: sys
+        - mountPath: /etc/nv_tegra_release
+          name: tegra-release
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        hardware: jetson
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+      volumes:
+      - hostPath:
+          path: /var/lib/kubelet/device-plugins
+          type: ''
+        name: device-plugin
+      - hostPath:
+          path: /dev
+          type: ''
+        name: dev
+      - hostPath:
+          path: /sys
+          type: ''
+        name: sys
+      - hostPath:
+          path: /etc/nv_tegra_release
+          type: ''
+        name: tegra-release
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate

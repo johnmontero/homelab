@@ -4,63 +4,77 @@ Configuración declarativa del clúster **k3s** del homelab. Todo lo versionado 
 debe poder **recrearse o modificarse** aplicando estos manifiestos.
 
 - Diseño del clúster (nodos, arquitectura, storage): [`../docs/04-kubernetes-cluster.md`](../docs/04-kubernetes-cluster.md)
+- Nodos Jetson (host, k3s agent, GPU): [`../docs/06-jetson-nodes.md`](../docs/06-jetson-nodes.md)
 - Plataforma de datos PostgreSQL (CNPG): [`../docs/05-postgres-cnpg.md`](../docs/05-postgres-cnpg.md)
 
 ## Estructura
 
 ```
 kubernetes/
-├── README.md                 # este archivo (índice + orden de aplicación)
-└── data/                     # namespace `data`: PostgreSQL (CloudNativePG)
-    ├── postgres-dev-cluster.yaml    # dev (zimaboard/amd64, 1 instancia)
-    ├── postgres-prod-cluster.yaml   # prod (jetson-4gb/arm64, QoS Guaranteed)
-    └── backups/                     # backups continuos → RustFS (PENDIENTE)
-        ├── 00-secret-rustfs.example.yaml
-        ├── 10-objectstore-rustfs.yaml
-        └── 20-scheduledbackup-prod.yaml
+├── cluster/                  # básicos del clúster
+│   ├── namespaces.yaml
+│   └── node-labels.sh        # etiquetas de nodo (kubectl)
+├── platform/                 # componentes base (+ instaladores en README)
+│   ├── README.md             # versiones, URLs y orden de instalación
+│   ├── metallb/              # IPAddressPool + L2Advertisement (192.168.18.220-240)
+│   ├── gateway/              # GatewayClass (eg) + Gateway (homelab-gateway)
+│   └── nvidia-device-plugin/ # DaemonSet GPU (Jetson)
+├── storage/                  # RustFS (S3) — ns storage
+│   ├── rustfs-secret.example.yaml
+│   ├── rustfs-pvc.yaml
+│   ├── rustfs-deployment.yaml
+│   └── rustfs-service.yaml
+├── ai-agents/                # Ollama, LocalAI, Kokoro-TTS — ns ai-agents
+│   ├── ollama.yaml           # deploy + svc + pvc
+│   ├── ollama-secret.example.yaml
+│   ├── localai.yaml          # deploy + svc + pvc + configmap
+│   ├── kokoro-tts.yaml       # deploy + svc
+│   └── httproute-ai.yaml     # ai.home.lab → ollama-service
+└── data/                     # PostgreSQL (CloudNativePG)
+    ├── postgres-dev-cluster.yaml
+    ├── postgres-prod-cluster.yaml
+    └── backups/              # → RustFS (pendiente de habilitar)
 ```
 
-## Componentes de plataforma (instalados fuera de este repo)
+## Componentes de plataforma
 
-| Componente | Namespace | Estado | Notas |
-|-----------|-----------|--------|-------|
-| k3s | — | ✅ | 1 server (zimaboard) + 3 agents (Jetson) |
-| CloudNativePG (operador) | `cnpg-system` | ✅ | v1.30 |
-| RustFS (S3) | `storage` | ✅ | 1 réplica; `rustfs-service` :9000 |
-| cert-manager | `cert-manager` | ⏳ pendiente | requerido por el plugin de backups |
-| Barman Cloud Plugin | `cnpg-system` | ⏳ pendiente | backups a S3/RustFS |
+| Componente | Namespace | Estado | Instalación |
+|-----------|-----------|--------|-------------|
+| k3s | — | ✅ | server (zimaboard) + 3 agents (Jetson) — `docs/06` |
+| MetalLB | `metallb-system` | ✅ | operador + `platform/metallb/` |
+| Envoy Gateway | `envoy-gateway-system` | ✅ | operador + `platform/gateway/` |
+| NVIDIA device plugin | `kube-system` | ✅ | `platform/nvidia-device-plugin/` |
+| CloudNativePG | `cnpg-system` | ✅ | operador v1.30 |
+| RustFS (S3) | `storage` | ✅ | `storage/` |
+| IA (Ollama/LocalAI/Kokoro) | `ai-agents` | ✅ | `ai-agents/` (corren en zimaboard/CPU) |
+| cert-manager + Barman plugin | `cert-manager`/`cnpg-system` | ⏳ | backups (ver `data/`) |
 
-## Orden de aplicación (recrear desde cero)
+## Orden de aplicación (reinstalar desde cero)
 
-Requisito previo: el operador CNPG ya instalado (`cnpg-system`) y el namespace `data`.
+Detalle e instaladores oficiales en [`platform/README.md`](./platform/README.md).
 
 ```bash
-# 0) namespace
-kubectl create namespace data --dry-run=client -o yaml | kubectl apply -f -
-
-# 1) clústeres PostgreSQL
+# 1) k3s (server + agents) — docs/06-jetson-nodes.md
+# 2) básicos
+kubectl apply -f kubernetes/cluster/namespaces.yaml
+bash    kubernetes/cluster/node-labels.sh
+# 3) plataforma (operadores + config)
+kubectl apply -f kubernetes/platform/metallb/
+kubectl apply -f kubernetes/platform/gateway/
+kubectl apply -f kubernetes/platform/nvidia-device-plugin/
+# 4) storage (crear antes el secret rustfs-creds; ver *.example.yaml)
+kubectl apply -f kubernetes/storage/
+# 5) IA
+kubectl apply -f kubernetes/ai-agents/
+# 6) datos (operador CNPG ya instalado)
 kubectl apply -f kubernetes/data/postgres-dev-cluster.yaml
 kubectl apply -f kubernetes/data/postgres-prod-cluster.yaml
-
-# 2) backups (cuando se habiliten; ver docs/05-postgres-cnpg.md)
-#   a. instalar cert-manager y el Barman Cloud Plugin
-#   b. crear el secret rustfs-backup y el bucket pg-prod-backups en RustFS
-#   c. aplicar el ObjectStore y el ScheduledBackup, y descomentar `spec.plugins`
-#      en postgres-prod-cluster.yaml
-kubectl apply -f kubernetes/data/backups/10-objectstore-rustfs.yaml
-kubectl apply -f kubernetes/data/backups/20-scheduledbackup-prod.yaml
+# 7) backups a RustFS (cuando se habiliten) — ver docs/05-postgres-cnpg.md
 ```
 
 ## Runbooks rápidos
 
-- **Cambiar recursos/parámetros de una BD:** editar el YAML del cluster y
-  `kubectl apply -f ...`. CNPG reconcilia (algunos parámetros requieren restart;
-  `primaryUpdateMethod` por defecto es `restart`).
-- **Recrear una BD desde cero (sin datos):** `kubectl delete cluster <nombre> -n data`
-  y borrar su PVC (`kubectl delete pvc -n data -l cnpg.io/cluster=<nombre>`), luego
-  `kubectl apply -f ...`. ⚠️ Destruye datos.
-- **NO cambiar el major (17→18) editando `imageName` en caliente:** CNPG lo trata
-  como *major upgrade* y puede quedarse atascado. Usar el procedimiento de upgrade
-  de CNPG o recrear si no hay datos.
-- **`local-path` no expande:** dimensiona el PVC de entrada; para crecer, hay que
-  recrear/migrar.
+- **Cambiar recursos/parámetros:** editar el YAML y `kubectl apply -f ...`.
+- **Secrets:** no se versionan (ver `.gitignore`); usar los `*.example.yaml`.
+- **PostgreSQL:** runbooks (recrear, upgrades, backups) en `../docs/05-postgres-cnpg.md`.
+- **`local-path` no expande:** dimensionar PVC de entrada.
