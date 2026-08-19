@@ -33,8 +33,25 @@ kubectl apply -f kubernetes/platform/monitoring/httproute-grafana.yaml
 
 Cada cluster CNPG tiene `spec.monitoring.enablePodMonitor: true` → crea un
 `PodMonitor` en `data` que Prometheus scrapea (verificado: `cnpg_collector_up=1`
-para `postgres-dev` y `postgres-prod`). Dashboards de CNPG disponibles en Grafana
-(importar el oficial de CloudNativePG si se desea).
+para `postgres-dev` y `postgres-prod`).
+
+## Dashboards
+
+El stack ya provisiona dashboards de Kubernetes y node-exporter. Los dashboards
+propios se cargan vía el **sidecar** de Grafana (`grafana-sc-dashboard`), que
+descubre ConfigMaps con la etiqueta `grafana_dashboard=1` en cualquier namespace.
+
+- **CloudNativePG** (uid `cloudnative-pg`): dashboard oficial, versionado en
+  [`../kubernetes/platform/monitoring/dashboards/cloudnativepg.json`](../kubernetes/platform/monitoring/dashboards/cloudnativepg.json).
+  Se genera el ConfigMap con kustomize:
+  ```bash
+  kubectl apply -k kubernetes/platform/monitoring/dashboards/ --server-side
+  ```
+  > `--server-side` es obligatorio: el JSON (~253 KB) supera los 256 KB con la
+  > anotación `last-applied` que añade el apply cliente.
+
+Para agregar más dashboards: dejar el `.json` en `dashboards/` y añadirlo a
+`files:` del `kustomization.yaml`.
 
 ## Acceso a Grafana
 

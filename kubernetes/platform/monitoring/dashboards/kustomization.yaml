@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Genera ConfigMaps de dashboards para Grafana. El sidecar de kube-prometheus-stack
+# (grafana-sc-dashboard) descubre ConfigMaps con la etiqueta grafana_dashboard=1 en
+# cualquier namespace y los carga automaticamente. El JSON vive aparte para poder
+# versionarlo/diferenciarlo comodamente.
+#
+# Aplicar:  kubectl apply -k kubernetes/platform/monitoring/dashboards/ --server-side
+# (--server-side es obligatorio: el JSON supera los 256KB con la anotacion
+#  last-applied que agrega el apply cliente).
+
+namespace: monitoring
+
+configMapGenerator:
+  - name: grafana-dashboard-cloudnativepg
+    files:
+      - cloudnativepg.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      disableNameSuffixHash: true

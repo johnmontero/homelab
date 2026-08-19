@@ -29,8 +29,9 @@ observabilidad sí usa Helm). Versiones observadas en el clúster actual.
 - `nvidia-device-plugin/daemonset.yaml` — expone `nvidia.com/gpu` en los Jetson.
 - `monitoring/` — `values.yaml` de kube-prometheus-stack (plano de monitoreo en
   zimaboard, node-exporter en todos los nodos), `prometheusrule-homelab.yaml`
-  (alertas propias) y `httproute-grafana.yaml` (`grafana.home.lab`). Detalle en
-  [`../../docs/07-observabilidad.md`](../../docs/07-observabilidad.md).
+  (alertas propias), `httproute-grafana.yaml` (`grafana.home.lab`) y
+  `dashboards/` (dashboards propios vía sidecar; `kubectl apply -k ... --server-side`).
+  Detalle en [`../../docs/07-observabilidad.md`](../../docs/07-observabilidad.md).
 
 ## Orden de instalación (reinstalar desde cero)
 
