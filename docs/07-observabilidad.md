@@ -63,6 +63,32 @@ nuevo bloque en `configMapGenerator` del `kustomization.yaml`, luego re-aplicar 
 > GPU (haría falta DCGM, inviable en Tegra R32.7.6) y RustFS no expone `/metrics`.
 > Serían dashboards vacíos.
 
+## Pendiente / roadmap (no implementado)
+
+Ideas para ampliar la observabilidad cuando se retome. **Solo documentado**, aún no
+aplicado.
+
+### Métricas de GPU en los Jetson (Tegra)
+
+DCGM exporter no funciona en Tegra/L4T R32.7.6. La alternativa viable es
+**`jetson-stats` (jtop)** + un exporter Prometheus:
+
+- Instalar en cada Jetson: `sudo pip3 install jetson-stats` (expone `jtop`).
+- Usar un exporter comunitario de jtop (p. ej. un `jetson-exporter`/`jtop-exporter`)
+  que publique `/metrics` con GPU%, temperaturas, potencia y frecuencias del Tegra.
+- Exponerlo como pod/DaemonSet (o servicio host) con un `PodMonitor`/`ServiceMonitor`
+  y `nodeSelector: hardware=jetson`.
+- Importar un dashboard de Jetson/jtop (buscar en grafana.com) y versionarlo en
+  `dashboards/`.
+
+### Métricas de RustFS
+
+RustFS no expone `/metrics` en la versión desplegada. Si una versión futura habilita
+un endpoint Prometheus (estilo MinIO `/minio/v2/metrics/cluster`):
+
+- Agregar un `ServiceMonitor` en `storage` apuntando al puerto de métricas.
+- Versionar un dashboard de object storage en `dashboards/`.
+
 ## Acceso a Grafana
 
 - URL: **http://grafana.home.lab** (requiere DNS rewrite en AdGuard:
