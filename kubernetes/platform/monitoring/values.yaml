@@ -53,8 +53,10 @@ grafana:
     storageClassName: local-path
     size: 2Gi
   resources:
-    requests: { cpu: 50m, memory: 128Mi }
-    limits: { memory: 256Mi }
+    # Grafana 13 (bleve, provisioning, live, plugins) necesita mas que 256Mi:
+    # con 256Mi el contenedor era OOMKilled al usar Explore (loop chunkNotFound).
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
 
 prometheus:
   prometheusSpec:
