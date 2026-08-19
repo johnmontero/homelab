@@ -24,6 +24,9 @@ spec:
     size: 10Gi
     storageClass: local-path
 
+  monitoring:
+    enablePodMonitor: true
+
   bootstrap:
     initdb:
       database: dev_db

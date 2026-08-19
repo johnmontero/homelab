@@ -1,0 +1,51 @@
+# Alertas propias del homelab. Prometheus (kube-prometheus-stack) las descubre por
+# `ruleSelectorNilUsesHelmValues: false` (selecciona reglas de cualquier namespace).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab-rules
+  namespace: monitoring
+  labels:
+    role: alert-rules
+spec:
+  groups:
+    - name: homelab.storage
+      rules:
+        # local-path NO expande: un PVC lleno es incidente. Avisar al 85%.
+        - alert: HomelabPVCAlmostFull
+          expr: |
+            kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes < 0.15
+          for: 15m
+          labels: { severity: critical }
+          annotations:
+            summary: "PVC casi lleno ({{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }})"
+            description: "Queda <15% libre. local-path no expande: liberar espacio o recrear/migrar."
+    - name: homelab.nodes
+      rules:
+        # RAM alta (crítico en los Jetson de 2 GB).
+        - alert: HomelabNodeMemoryHigh
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.90
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Memoria alta en {{ $labels.instance }}"
+            description: "Uso de RAM >90% por 10m. Riesgo de OOM."
+        - alert: HomelabPodOOMKilled
+          expr: |
+            kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+          for: 1m
+          labels: { severity: warning }
+          annotations:
+            summary: "OOMKilled: {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: "Un contenedor fue terminado por falta de memoria."
+    - name: homelab.postgres
+      rules:
+        # Exporter de métricas de una instancia CNPG caído (proxy de salud).
+        - alert: CNPGInstanceDown
+          expr: cnpg_collector_up == 0
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "CNPG sin métricas ({{ $labels.namespace }}/{{ $labels.pod }})"
+            description: "El exporter de la instancia PostgreSQL no responde hace 5m."

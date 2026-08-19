@@ -47,7 +47,8 @@ Laboratorio de red y cómputo en casa, basado en un **ZimaBoard 2** que actúa c
 | Orquestación | **k3s** (1 server + 3 agents) | ✅ |
 | Datos | **CloudNativePG** (PostgreSQL dev/prod, pgvector) | ✅ |
 | Object storage | **RustFS** (S3-compatible, ns `storage`) | ✅ |
-| Backups BD | Barman Cloud Plugin → RustFS (PITR) | ⏳ pendiente |
+| Backups BD | Barman Cloud Plugin → RustFS (PITR) | ✅ |
+| Observabilidad | kube-prometheus-stack (Prometheus/Grafana/Alertmanager) | ✅ |
 | Cómputo/servicios | Docker (registry, runner `act`, etc.) | 🔜 |
 
 ## Equipos y direcciones fijas
@@ -75,6 +76,7 @@ aloja los servicios propios y la **plataforma de datos PostgreSQL** con
 - [Clúster Kubernetes (k3s)](./docs/04-kubernetes-cluster.md) — nodos, arquitectura, storage.
 - [PostgreSQL con CloudNativePG](./docs/05-postgres-cnpg.md) — dev/prod, backups, runbooks.
 - [Nodos Jetson Nano](./docs/06-jetson-nodes.md) — host, k3s agent, GPU/containerd.
+- [Observabilidad](./docs/07-observabilidad.md) — Prometheus, Grafana, Alertmanager, alertas.
 - [Solución de problemas](./docs/03-troubleshooting.md)
 
 ## Relación con Cotejo

@@ -20,6 +20,10 @@ spec:
     size: 20Gi
     storageClass: local-path
 
+  # Métricas para Prometheus (kube-prometheus-stack descubre este PodMonitor).
+  monitoring:
+    enablePodMonitor: true
+
   bootstrap:
     initdb:
       database: app_db

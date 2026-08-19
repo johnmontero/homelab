@@ -1,0 +1,18 @@
+# Expone Grafana en grafana.home.lab a través del Envoy Gateway (homelab-gateway,
+# ns default, IP MetalLB 192.168.18.220). Requiere un DNS rewrite en AdGuard:
+#   grafana.home.lab → 192.168.18.220
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-route
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: homelab-gateway
+      namespace: default
+  hostnames:
+    - grafana.home.lab
+  rules:
+    - backendRefs:
+        - name: monitoring-grafana
+          port: 80

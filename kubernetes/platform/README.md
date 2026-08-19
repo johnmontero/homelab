@@ -1,8 +1,8 @@
 # Plataforma (instaladores)
 
 Componentes de base del clúster. Se instalan con sus manifiestos/instaladores
-oficiales (no Helm en este clúster) y luego se aplican los manifiestos de config
-que viven aquí. Versiones observadas en el clúster actual.
+oficiales y luego se aplican los manifiestos de config que viven aquí (la
+observabilidad sí usa Helm). Versiones observadas en el clúster actual.
 
 ## Base
 
@@ -16,6 +16,7 @@ que viven aquí. Versiones observadas en el clúster actual.
 | **cert-manager** | v1.21.1 | requerido por el Barman Cloud Plugin (backups) |
 | **Barman Cloud Plugin** | v0.14.0 | `kubectl apply -f https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.14.0/manifest.yaml` |
 | **NVIDIA device plugin** | v0.14.0 | `nvidia-device-plugin/daemonset.yaml` (nodeSelector `hardware=jetson`) |
+| **kube-prometheus-stack** | Helm (prometheus-community) | `helm upgrade --install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f monitoring/values.yaml` |
 
 > Ajustar las versiones/URLs a las realmente instaladas antes de reinstalar.
 
@@ -26,6 +27,10 @@ que viven aquí. Versiones observadas en el clúster actual.
   IP `192.168.18.220` vía MetalLB). Las rutas HTTP viven junto a cada app
   (p. ej. `../ai-agents/httproute-ai.yaml`).
 - `nvidia-device-plugin/daemonset.yaml` — expone `nvidia.com/gpu` en los Jetson.
+- `monitoring/` — `values.yaml` de kube-prometheus-stack (plano de monitoreo en
+  zimaboard, node-exporter en todos los nodos), `prometheusrule-homelab.yaml`
+  (alertas propias) y `httproute-grafana.yaml` (`grafana.home.lab`). Detalle en
+  [`../../docs/07-observabilidad.md`](../../docs/07-observabilidad.md).
 
 ## Orden de instalación (reinstalar desde cero)
 
@@ -42,6 +47,12 @@ kubectl apply -f <envoy-gateway install.yaml>
 kubectl apply -f kubernetes/platform/gateway/
 # 5) NVIDIA device plugin (Jetson)
 kubectl apply -f kubernetes/platform/nvidia-device-plugin/daemonset.yaml
-# 6) CloudNativePG (operador) → luego kubernetes/data/ (ver ../README.md)
-# 7) RustFS → kubernetes/storage/  |  IA → kubernetes/ai-agents/
+# 6) Observabilidad (Helm)
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+  -n monitoring --create-namespace -f kubernetes/platform/monitoring/values.yaml
+kubectl apply -f kubernetes/platform/monitoring/prometheusrule-homelab.yaml
+kubectl apply -f kubernetes/platform/monitoring/httproute-grafana.yaml
+# 7) CloudNativePG (operador) → luego kubernetes/data/ (ver ../README.md)
+# 8) RustFS → kubernetes/storage/  |  IA → kubernetes/ai-agents/
 ```

@@ -1,0 +1,77 @@
+# kube-prometheus-stack — valores afinados para el homelab.
+# Instalar:
+#   helm install monitoring prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace -f values.yaml
+#
+# Diseño: el plano de monitoreo (Prometheus/Grafana/Alertmanager/KSM/operador) se
+# fija al ZimaBoard (amd64, 16 GB); node-exporter corre en TODOS los nodos.
+# Prometheus descubre los PodMonitor/Rules de cualquier namespace (incl. CNPG).
+
+crds:
+  enabled: true
+
+# ── node-exporter: en todos los nodos (arm64 + amd64), footprint mínimo ──
+prometheus-node-exporter:
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { memory: 64Mi }
+
+kube-state-metrics:
+  nodeSelector: { kubernetes.io/hostname: zimaboard2 }
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+prometheusOperator:
+  nodeSelector: { kubernetes.io/hostname: zimaboard2 }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+  admissionWebhooks:
+    patch:
+      nodeSelector: { kubernetes.io/hostname: zimaboard2 }
+
+alertmanager:
+  alertmanagerSpec:
+    nodeSelector: { kubernetes.io/hostname: zimaboard2 }
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+      limits: { memory: 128Mi }
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources: { requests: { storage: 2Gi } }
+
+grafana:
+  nodeSelector: { kubernetes.io/hostname: zimaboard2 }
+  # Sin adminPassword: el chart genera una aleatoria en el secret
+  # monitoring-grafana (ver docs/07-observabilidad.md para obtenerla).
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+prometheus:
+  prometheusSpec:
+    nodeSelector: { kubernetes.io/hostname: zimaboard2 }
+    retention: 7d
+    # Descubrir recursos de monitoreo de CUALQUIER namespace (no solo del release):
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits: { memory: 1Gi }
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources: { requests: { storage: 8Gi } }
