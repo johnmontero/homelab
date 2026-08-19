@@ -23,7 +23,8 @@ spec:
         - name: bucket-init
           image: ghcr.io/protecso-sac/pivas-fs:latest   # REEMPLAZAR por tu registry/tag
           imagePullPolicy: Always
-          command: ["/app/bin/pivas", "eval", "Pivas.Storage.ensure_evidence_bucket()"]
+          # `eval` no arranca las apps: se inician :req/:ex_aws antes de la request S3.
+          command: ["sh", "-c", "bin=$(ls rel); ./rel/$bin/bin/$bin eval 'Application.ensure_all_started(:req); Application.ensure_all_started(:ex_aws); Pivas.Storage.ensure_evidence_bucket()'"]
           envFrom:
             - secretRef:
                 name: pivas-env

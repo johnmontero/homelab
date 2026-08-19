@@ -28,7 +28,7 @@ spec:
         - name: migrate
           image: ghcr.io/protecso-sac/pivas-fs:latest   # REEMPLAZAR por tu registry/tag
           imagePullPolicy: Always
-          command: ["/app/bin/pivas", "eval", "Pivas.Release.migrate()"]
+          command: ["sh", "-c", "bin=$(ls rel); ./rel/$bin/bin/$bin eval 'Pivas.Release.migrate()'"]
           envFrom:
             - secretRef:
                 name: pivas-env
