@@ -1,0 +1,56 @@
+# DR: espejo del bucket de backups de RustFS → destino OFF-SITE (S3 externo).
+# Elimina el SPOF de RustFS (1 réplica, mismo hardware). Cada 6 h.
+#
+# Requiere el secret `offsite-backup` (ver 30-...) y `rustfs-backup` (fuente).
+# Arranca SUSPENDIDO: poner `suspend: false` cuando el destino esté configurado.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: offsite-backup-mirror
+  namespace: data
+  labels:
+    homelab.tier: prod
+spec:
+  suspend: true
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: zimaboard2   # amd64; junto a RustFS
+          containers:
+            - name: mc-mirror
+              image: minio/mc:latest
+              env:
+                - name: SRC_AK
+                  valueFrom: { secretKeyRef: { name: rustfs-backup, key: ACCESS_KEY_ID } }
+                - name: SRC_SK
+                  valueFrom: { secretKeyRef: { name: rustfs-backup, key: ACCESS_SECRET_KEY } }
+                - name: DEST_ENDPOINT
+                  valueFrom: { secretKeyRef: { name: offsite-backup, key: DEST_ENDPOINT } }
+                - name: DEST_BUCKET
+                  valueFrom: { secretKeyRef: { name: offsite-backup, key: DEST_BUCKET } }
+                - name: DEST_AK
+                  valueFrom: { secretKeyRef: { name: offsite-backup, key: DEST_ACCESS_KEY } }
+                - name: DEST_SK
+                  valueFrom: { secretKeyRef: { name: offsite-backup, key: DEST_SECRET_KEY } }
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  mc alias set src http://rustfs-service.storage.svc.cluster.local:9000 "$SRC_AK" "$SRC_SK"
+                  mc alias set dst "$DEST_ENDPOINT" "$DEST_AK" "$DEST_SK"
+                  mc mb -p "dst/$DEST_BUCKET" || true
+                  mc mirror --overwrite --remove src/pg-prod-backups "dst/$DEST_BUCKET/pg-prod-backups"
+                  echo "off-site mirror OK: $(date -u)"
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }

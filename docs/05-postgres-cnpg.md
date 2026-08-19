@@ -96,9 +96,45 @@ kubectl cnpg backup postgres-prod -n data     # requiere el plugin kubectl-cnpg
 kubectl get backups.postgresql.cnpg.io -n data
 ```
 
-> ⚠️ **RustFS es SPOF** (1 réplica sobre local-path, mismo hardware). Es PITR /
-> anti-error lógico, **no DR**. Para DR real: copia periódica off-site (p. ej.
-> `rclone` del bucket a otro destino / S3 en la nube).
+> ⚠️ **RustFS es SPOF** (1 réplica sobre local-path, mismo hardware). El PITR local
+> es anti-error lógico; el **DR real** lo da la copia off-site (abajo).
+
+### Restore verificado (drill de PITR)
+
+Se validó el ciclo completo: se creó un cluster `postgres-restore` (recovery desde
+`prod-backups`), recuperó el marcador de prueba y `pgvector 0.8.6`, y se eliminó.
+Patrón de recuperación (recovery a "latest"):
+
+```yaml
+spec:
+  bootstrap:
+    recovery:
+      source: prod-source
+  externalClusters:
+    - name: prod-source
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: prod-backups
+          serverName: postgres-prod   # nombre del cluster de origen
+```
+> El restore es una copia física del data dir → debe correr en **arm64** (mismo
+> que el origen). Para PITR a un instante: añadir `recovery.recoveryTarget`.
+
+### DR off-site (copia del bucket fuera del homelab)
+
+`kubernetes/data/backups/31-offsite-mirror-cronjob.yaml`: `CronJob` (cada 6 h) que
+hace `mc mirror` de `pg-prod-backups` (RustFS) → un **S3 externo** (p. ej. AWS S3).
+Arranca **suspendido**. Para habilitarlo:
+
+```bash
+kubectl create secret generic offsite-backup -n data \
+  --from-literal=DEST_ENDPOINT='https://s3.us-east-1.amazonaws.com' \
+  --from-literal=DEST_BUCKET='homelab-pg-dr' \
+  --from-literal=DEST_ACCESS_KEY='<AK>' --from-literal=DEST_SECRET_KEY='<SK>'
+kubectl -n data patch cronjob offsite-backup-mirror --type merge -p '{"spec":{"suspend":false}}'
+kubectl -n data create job --from=cronjob/offsite-backup-mirror offsite-manual-test   # prueba
+```
 
 ## Roadmap
 
