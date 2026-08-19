@@ -14,6 +14,25 @@ k3s. Documentado para poder **reflashear/reinstalar** un nodo y reintegrarlo.
 - Acceso: `ssh zb` (ZimaBoard) y desde ahí `ssh jetson-4gb-01.home.lab` (usuario
   `devops`). Los Jetson **no** son alcanzables directamente desde fuera de la LAN.
 
+## Resolución de nombres (DNS)
+
+Los hostnames están registrados como **rewrites estáticos en AdGuard**
+(Filtros → Reescrituras DNS):
+
+| Dominio | Respuesta |
+|---------|-----------|
+| `jetson-4gb-01.home.lab` | `10.0.1.20` |
+| `jetson-2gb-01.home.lab` | `10.0.1.21` |
+| `jetson-2gb-02.home.lab` | `10.0.1.22` |
+
+> **Alcanzabilidad (importante):** el DNS resuelve desde toda la LAN, pero los
+> Jetson **solo son accesibles desde el ZimaBoard** (SSH/TCP abierto). Desde la
+> MacBook (`10.0.1.11`) el nombre resuelve pero **no hay ruta L2** a esas IPs
+> (cuelgan del segmento del ZimaBoard). Para acceder desde la MacBook hay que
+> resolver la topología L2 (mismo switch), rutear por el ZimaBoard o usar el
+> subnet-router de Tailscale. El **ICMP/ping está filtrado** en los Jetson: usar
+> TCP (p. ej. `nc -z <host> 22`) para verificar acceso, no `ping`.
+
 ## Sistema base (host)
 
 | Ítem | Valor |
