@@ -1,0 +1,12 @@
+# Secretos y credenciales — NO versionar (usar los *.example.yaml como plantilla)
+*secret*.yaml
+!*secret*.example.yaml
+*.key
+*.pem
+kubeconfig
+*.kubeconfig
+.env
+.env.*
+
+# Sistema
+.DS_Store

@@ -1,0 +1,51 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-dev
+  namespace: data
+  labels:
+    homelab.tier: dev
+spec:
+  instances: 1
+  # Imagen operand de CloudNativePG: PG18 "system" (multi-arch), incluye pgvector.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
+  enableSuperuserAccess: false
+
+  # dev vive en el nodo fuerte (zimaboard, amd64). Sin réplicas, la arquitectura no
+  # importa. No compite con prod (arm64).
+  affinity:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+
+  # 1 sola instancia: el PDB con minAvailable bloquearía drenajes del nodo.
+  enablePDB: false
+
+  storage:
+    size: 10Gi
+    storageClass: local-path
+
+  bootstrap:
+    initdb:
+      database: dev_db
+      owner: dev_admin
+      encoding: UTF8
+      localeCollate: C
+      localeCType: C
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        - CREATE EXTENSION IF NOT EXISTS "vector";
+
+  postgresql:
+    parameters:
+      max_connections: "50"
+      shared_buffers: 128MB
+      wal_level: logical
+
+  # QoS Burstable: requests bajos, limits holgados (entorno de pruebas).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi

@@ -1,0 +1,19 @@
+# Backup base programado de postgres-prod → ObjectStore `prod-backups` (RustFS),
+# vía el Barman Cloud Plugin. El archivado de WAL (continuo, para PITR) lo habilita
+# el bloque `spec.plugins` del cluster postgres-prod (ver postgres-prod-cluster.yaml).
+#
+# Requiere que postgres-prod tenga habilitado el plugin `barman-cloud.cloudnative-pg.io`.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: prod-daily
+  namespace: data
+spec:
+  # Formato cron de 6 campos (seg min hora dia mes diaSemana). 03:00 diario.
+  schedule: "0 0 3 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: postgres-prod
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io

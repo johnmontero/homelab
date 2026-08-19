@@ -1,0 +1,62 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-prod
+  namespace: data
+  labels:
+    homelab.tier: prod
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
+  enableSuperuserAccess: false
+
+  # Arranque en el Jetson de 4 GB (arm64). Cuando entre la Mac Mini M1 (arm64,
+  # 500 GB) como nodo Linux, se migra el primario allí y se añade réplica → HA.
+  affinity:
+    nodeSelector:
+      kubernetes.io/hostname: jetson-4gb-01.home.lab
+
+  storage:
+    size: 20Gi
+    storageClass: local-path
+
+  bootstrap:
+    initdb:
+      database: app_db
+      owner: app_admin
+      encoding: UTF8
+      localeCollate: C
+      localeCType: C
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        - CREATE EXTENSION IF NOT EXISTS "vector";
+
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: 512MB
+      effective_cache_size: 1536MB
+      work_mem: 8MB
+      maintenance_work_mem: 128MB
+      wal_level: logical
+
+  # QoS Guaranteed: requests == limits (CPU y RAM) para evitar OOM/throttle por
+  # vecinos. Ajustado al Jetson de 4 GB (deja headroom para el SO y kubelet).
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+  # ── Backups continuos a RustFS (PENDIENTE de habilitar) ──────────────────────
+  # Descomentar cuando estén instalados cert-manager + Barman Cloud Plugin y creado
+  # el ObjectStore `prod-backups` (ver kubernetes/data/backups/). Habilita el
+  # archivado de WAL continuo hacia RustFS (S3). Ver docs/05-postgres-cnpg.md.
+  #
+  # plugins:
+  #   - name: barman-cloud.cloudnative-pg.io
+  #     isWALArchiver: true
+  #     parameters:
+  #       barmanObjectName: prod-backups

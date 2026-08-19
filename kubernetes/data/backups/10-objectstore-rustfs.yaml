@@ -1,0 +1,25 @@
+# ObjectStore del Barman Cloud Plugin → RustFS (S3-compatible) en el namespace
+# `storage`. Requiere: cert-manager + plugin-barman-cloud instalados, el bucket
+# `pg-prod-backups` creado en RustFS y el secret `rustfs-backup` (ver 00-...).
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: prod-backups
+  namespace: data
+spec:
+  retentionPolicy: "14d"
+  configuration:
+    destinationPath: s3://pg-prod-backups/
+    endpointURL: http://rustfs-service.storage.svc.cluster.local:9000
+    s3Credentials:
+      accessKeyId:
+        name: rustfs-backup
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: rustfs-backup
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+      immediateCheckpoint: false
