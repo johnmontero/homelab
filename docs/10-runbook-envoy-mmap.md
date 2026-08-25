@@ -64,9 +64,10 @@ memoria al contenedor. Documentar aparte si se llega a necesitar.
 - ZimaOS es appliance: un update del SO puede resetear `/etc/sysctl.d`. Si vuelve
   el crash tras un update, re-aplicar.
 
-## Estado
+## Estado (2026-08-25)
 
-- [x] Data-plane recuperado a 2/2 el 2026-08-25 (pod `wbmps`).
-- [ ] Confirmar que `vm.max_map_count=262144` quedó **persistido** en
-      `/etc/sysctl.d/99-envoy-mmap.conf` (si el pod levantó solo por memoria
-      liberada y no por el sysctl, aplicar igual para evitar recaídas).
+- [x] Data-plane recuperado a 2/2 (pod `wbmps`).
+- [x] `vm.max_map_count=262144` **aplicado** (runtime) y **persistido** en
+      `/etc/sysctl.d/99-envoy-mmap.conf` (sobrevive reboots).
+
+**✅ Resuelto.** (Caveat ZimaOS: re-verificar tras un update del SO.)
