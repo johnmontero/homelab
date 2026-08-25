@@ -55,10 +55,12 @@ spec:
           resources:
             requests:
               cpu: 250m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: "2"
-              memory: 2Gi
+              # Crew = gateway + modelo de embeddings + sesión de agente (kiro-cli).
+              # 2Gi provocaba OOMKilled al iniciar una sesión; el nodo tiene 16Gi.
+              memory: 4Gi
           # Sin probes HTTP: por defecto el dashboard escucha en loopback, así que
           # kubelet no lo alcanza por podIP. El acceso se hace por `kubectl port-forward`
           # (usa la loopback del pod). Si habilitas bind de red + token (ver README),
