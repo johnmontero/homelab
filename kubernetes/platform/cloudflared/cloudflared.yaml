@@ -8,7 +8,7 @@
 # Public Hostnames (se configuran en el panel de Cloudflare):
 #   pivas.nx73.app      ->  http://pivas-service.pivas.svc.cluster.local:4003
 #   pivas-evidence.nx73.app   ->  http://rustfs-service.storage.svc.cluster.local:9000   (exclusivo de PIVAS)
-#   pulse.nx73.app      ->  http://pulse-service.pulse.svc.cluster.local:<puerto>   (cuando aplique)
+#   pulse.nx73.app      ->  http://pulse-service.pulse.svc.cluster.local:4002
 #   ...                 ->  (otros proyectos: su propio subdominio -> su service)
 #
 # El token del túnel `homelab` se guarda en el secret cloudflared-token (ns tunnel).

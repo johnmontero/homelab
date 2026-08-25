@@ -30,7 +30,7 @@ añadir la ruta del proyecto al service interno del clúster:
 |--------------------|-----------------|
 | `pivas.nx73.app` | `http://pivas-service.pivas.svc.cluster.local:4003` |
 | `pivas-evidence.nx73.app` | `http://rustfs-service.storage.svc.cluster.local:9000` (exclusivo de PIVAS) |
-| `pulse.nx73.app` | `http://pulse-service.pulse.svc.cluster.local:<puerto>` |
+| `pulse.nx73.app` | `http://pulse-service.pulse.svc.cluster.local:4002` |
 
 Cloudflare crea automáticamente los registros DNS (CNAME) de esos subdominios.
 
