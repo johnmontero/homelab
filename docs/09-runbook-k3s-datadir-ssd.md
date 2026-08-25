@@ -141,10 +141,11 @@ Migración **funcionalmente aplicada** (pasos 1–6):
 - [x] Drop-in `10-ssd-datadir.conf` cargado: k3s tiene `Requires`+`After` del mount.
 - [x] `df /var/lib/rancher/k3s` → `/dev/sda`; cluster sano (nodos Ready).
 
+- [x] **Paso 7 — prueba de reboot** (2026-08-25 02:18): tras reiniciar, el SSD
+      montó antes de k3s (`/var/lib/rancher/k3s` = `/dev/sda[/@k3s]`), cluster
+      Ready y sin pods caídos. Orden de montaje validado.
+
 **Pendiente para cerrar:**
-- [ ] **Paso 7 — prueba de reboot**: reiniciar zimaboard2 y confirmar que k3s
-      arranca con el data-dir en el SSD (valida el orden de montaje). Crítico
-      antes de borrar los datos viejos.
 - [ ] **Paso 8 — recuperar espacio**: borrar `/DATA/k3s/k3s` (copia vieja
       huérfana, ~31G). **Hasta hacerlo, `/DATA` sigue al 84%** y el riesgo de
       disk-pressure NO desaparece: este paso es el que entrega el beneficio.
