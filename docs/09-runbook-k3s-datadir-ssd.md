@@ -145,7 +145,8 @@ Migración **funcionalmente aplicada** (pasos 1–6):
       montó antes de k3s (`/var/lib/rancher/k3s` = `/dev/sda[/@k3s]`), cluster
       Ready y sin pods caídos. Orden de montaje validado.
 
-**Pendiente para cerrar:**
-- [ ] **Paso 8 — recuperar espacio**: borrar `/DATA/k3s/k3s` (copia vieja
-      huérfana, ~31G). **Hasta hacerlo, `/DATA` sigue al 84%** y el riesgo de
-      disk-pressure NO desaparece: este paso es el que entrega el beneficio.
+- [x] **Paso 8 — recuperar espacio** (2026-08-25): borrada la copia vieja
+      `/DATA/k3s/k3s.OLD`. `/DATA` pasó de **84% → 17%** (7.3G usados, 38G libres).
+
+**✅ Migración COMPLETADA.** El data-dir de k3s vive en el SSD (`/dev/sda[/@k3s]`,
+14% usado) y el eMMC (`/DATA`) tiene 38G de colchón. Disk-pressure resuelto de raíz.
