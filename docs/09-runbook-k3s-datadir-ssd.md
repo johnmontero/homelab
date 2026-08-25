@@ -132,7 +132,19 @@ sudo systemctl start k3s
   no depende de cómo/cuándo monte CasaOS su copia.
 - No toca las imágenes del containerd de CasaOS (moby), solo el data-dir de k3s.
 
-## Estado
+## Estado (2026-08-25)
 
-- [ ] Pendiente de ejecutar (a 2026-08-25 nada aplicado en el nodo; el data-dir
-      sigue en `/var/lib/rancher/k3s -> /DATA/k3s/k3s`).
+Migración **funcionalmente aplicada** (pasos 1–6):
+- [x] Subvol `@k3s` creado en el SSD y datos copiados (~31G en `/dev/sda`).
+- [x] `/var/lib/rancher/k3s` es punto de montaje real (ya no symlink).
+- [x] `var-lib-rancher-k3s.mount` **active** y **enabled** (monta en boot).
+- [x] Drop-in `10-ssd-datadir.conf` cargado: k3s tiene `Requires`+`After` del mount.
+- [x] `df /var/lib/rancher/k3s` → `/dev/sda`; cluster sano (nodos Ready).
+
+**Pendiente para cerrar:**
+- [ ] **Paso 7 — prueba de reboot**: reiniciar zimaboard2 y confirmar que k3s
+      arranca con el data-dir en el SSD (valida el orden de montaje). Crítico
+      antes de borrar los datos viejos.
+- [ ] **Paso 8 — recuperar espacio**: borrar `/DATA/k3s/k3s` (copia vieja
+      huérfana, ~31G). **Hasta hacerlo, `/DATA` sigue al 84%** y el riesgo de
+      disk-pressure NO desaparece: este paso es el que entrega el beneficio.
