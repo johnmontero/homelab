@@ -1,0 +1,20 @@
+# Service ClusterIP para el dashboard/gateway. OJO: por defecto Kiro Crew escucha
+# en loopback dentro del pod, así que este Service (que conecta por podIP) solo
+# funciona si habilitas el bind de red + auth por token en la config (ver README).
+# Para acceso rápido y seguro usa `kubectl port-forward` (no requiere este Service).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kirocrew
+  namespace: kirocrew
+  labels:
+    app: kirocrew
+spec:
+  type: ClusterIP
+  selector:
+    app: kirocrew
+  ports:
+    - name: http
+      port: 5476
+      targetPort: 5476
+      protocol: TCP

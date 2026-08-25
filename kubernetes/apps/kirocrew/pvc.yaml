@@ -1,0 +1,18 @@
+# Estado de Kiro Crew: sesiones, memoria, skills, lecciones, credenciales de
+# kiro-cli y el modelo de embeddings. TODO vive aquí (KIROCREW_HOME=/home/kirocrew),
+# así que este PVC es imprescindible para sobrevivir reinicios/recreación del pod.
+# local-path es node-local: fija el pod al nodo donde se aprovisione el volumen.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kirocrew-home
+  namespace: kirocrew
+  labels:
+    app: kirocrew
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: local-path

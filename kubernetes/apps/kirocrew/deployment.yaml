@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kirocrew
+  namespace: kirocrew
+  labels:
+    app: kirocrew
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: kirocrew
+  strategy:
+    type: Recreate          # estado en un PVC RWO: nunca dos pods a la vez
+  template:
+    metadata:
+      labels:
+        app: kirocrew
+    spec:
+      # k8s inyecta env vars por cada Service del ns (KIROCREW_PORT=tcp://ip:5476),
+      # que colisiona con la KIROCREW_PORT (entero) que lee Crew y lo hace crashear.
+      # Desactivamos esa inyección.
+      enableServiceLinks: false
+      # SA con permisos mínimos para el CI→rollout de PIVAS (ver rbac.yaml). El token
+      # se auto-monta en /var/run/secrets/kubernetes.io/serviceaccount para que el
+      # agente pueda reiniciar deploy/pivas. Quítalo si no quieres darle ese acceso.
+      serviceAccountName: kirocrew-deployer
+      # Cluster mixto (ZimaBoard amd64 + Jetson arm64). La imagen es multi-arch,
+      # pero al usar local-path (node-local) fijamos el pod al nodo "servidor"
+      # amd64 (igual que postgres-dev/pivas) para que el volumen sea estable.
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      # El agente de Kiro Crew prueba un sandbox con user namespaces (unshare/clone).
+      # Bajo containerd (k3s) el perfil seccomp por defecto lo bloquea y DESHABILITA
+      # la ejecución de agentes. Unconfined permite el sandbox interno. Si aun así
+      # queda deshabilitado, ver README (bajar el nivel de sandbox en la config).
+      securityContext:
+        seccompProfile:
+          type: Unconfined
+      containers:
+        - name: kirocrew
+          image: ghcr.io/kirodotdev/kirocrew:stable
+          imagePullPolicy: Always
+          env:
+            - name: KIROCREW_PORT     # explícito por robustez (además de enableServiceLinks:false)
+              value: "5476"
+          ports:
+            - name: http
+              containerPort: 5476
+          # KIROCREW_HOME por defecto es /home/kirocrew (igual que el docker run oficial).
+          volumeMounts:
+            - name: home
+              mountPath: /home/kirocrew
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          # Sin probes HTTP: por defecto el dashboard escucha en loopback, así que
+          # kubelet no lo alcanza por podIP. El acceso se hace por `kubectl port-forward`
+          # (usa la loopback del pod). Si habilitas bind de red + token (ver README),
+          # puedes agregar readiness/liveness httpGet en / :5476.
+      volumes:
+        - name: home
+          persistentVolumeClaim:
+            claimName: kirocrew-home

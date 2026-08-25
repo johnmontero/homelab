@@ -1,0 +1,51 @@
+# RBAC mínimo para que Kiro Crew pueda reiniciar el deploy de PIVAS tras CI verde.
+# Alcance: SOLO el namespace `pivas`. Sin permisos de cluster ni sobre otros ns.
+#
+# `kubectl rollout restart` = patch de una anotación en spec.template del Deployment.
+# `kubectl rollout status`  = lee deployments + replicasets + pods.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kirocrew-deployer
+  namespace: kirocrew
+  labels:
+    app: kirocrew
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pivas-rollout
+  namespace: pivas          # los permisos viven en el ns de PIVAS
+  labels:
+    app: kirocrew
+rules:
+  # Reiniciar (patch) y consultar el Deployment. `list`/`watch` no aceptan
+  # resourceNames; `get`/`patch` sí se podrían acotar a ["pivas"] (ver nota abajo).
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+  # `rollout status` inspecciona replicasets y pods.
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kirocrew-pivas-rollout
+  namespace: pivas
+  labels:
+    app: kirocrew
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pivas-rollout
+subjects:
+  # El SA vive en el ns kirocrew; un RoleBinding puede referenciar SAs de otro ns.
+  - kind: ServiceAccount
+    name: kirocrew-deployer
+    namespace: kirocrew

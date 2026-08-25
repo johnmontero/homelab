@@ -1,0 +1,4 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kirocrew   # Kiro Crew — workspace de agentes persistente (memoria, skills, jobs)
