@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulse
+  namespace: pulse
+  labels:
+    app: pulse
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: pulse
+  strategy:
+    type: Recreate          # release de Phoenix; evita 2 versiones durante migración
+  template:
+    metadata:
+      labels:
+        app: pulse
+    spec:
+      # El clúster es mixto (ZimaBoard amd64 + Jetson arm64). La imagen de release
+      # se construye amd64, así que se fija al nodo amd64 (igual que postgres-dev).
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      # Migraciones antes de arrancar el server (Pulse.Release.migrate/0).
+      initContainers:
+        - name: migrate
+          image: ghcr.io/protecso-sac/pulse-fs:latest   # REEMPLAZAR por tu registry/tag
+          imagePullPolicy: Always
+          command: ["sh", "-c", "bin=$(ls rel); ./rel/$bin/bin/$bin eval 'Pulse.Release.migrate()'"]
+          envFrom:
+            - secretRef:
+                name: pulse-env
+      containers:
+        - name: pulse
+          image: ghcr.io/protecso-sac/pulse-fs:latest    # REEMPLAZAR por tu registry/tag
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: pulse-env
+          ports:
+            - name: http
+              containerPort: 4002
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4002
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4002
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      # Si la imagen es privada en GHCR, crear el secret y descomentar:
+      # imagePullSecrets:
+      #   - name: ghcr-creds
