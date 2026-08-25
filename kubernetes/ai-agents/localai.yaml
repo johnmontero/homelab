@@ -7,7 +7,12 @@ metadata:
   namespace: ai-agents
 spec:
   progressDeadlineSeconds: 600
-  replicas: 1
+  # Apagado a propósito (2026-08-25): estaba en crashloop desde hacía días y sus
+  # pods muertos (imagen multi-GB) llenaban el disco de zimaboard2, provocando
+  # disk-pressure que tumbaba postgres-dev y bloqueaba deploys. Se conservan PVC,
+  # Service y ConfigMap. Antes de volver a 1, arreglar la causa del crashloop y/o
+  # mover el data-dir de k3s al SSD de 250GB.
+  replicas: 0
   revisionHistoryLimit: 10
   selector:
     matchLabels:
