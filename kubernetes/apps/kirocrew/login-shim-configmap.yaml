@@ -28,6 +28,7 @@ data:
     import os
     import re
     import select
+    import ssl
     import subprocess
     import sys
     import threading
@@ -47,6 +48,8 @@ data:
     ALLOW_OPEN = os.environ.get("LOGIN_SHIM_ALLOW_OPEN", "").lower() in ("1", "true", "yes")
     LOGO_URL = os.environ.get("LOGIN_SHIM_LOGO_URL", PUBLIC_URL + "/logo.png")
     KIROCLI = os.environ.get("KIROCLI_BIN", "kiro-cli")
+    CREW_DEPLOYMENT = os.environ.get("CREW_DEPLOYMENT", "kirocrew")
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
     SESS_COOKIE = "shim_sess"
     SESS_TTL = int(os.environ.get("LOGIN_SHIM_SESSION_TTL", "43200"))  # 12h
 
@@ -377,6 +380,33 @@ data:
         threading.Thread(target=run_login, args=(method, url, region), daemon=True).start()
         return True
 
+    def restart_crew() -> None:
+        # rollout restart del deployment kirocrew: patch de restartedAt en spec.template.
+        # Usa el token del SA montado en el pod (RBAC acotado en rbac.yaml). Reinicia el
+        # propio pod (incluye este sidecar), asi que la respuesta se envia antes del corte.
+        with open(f"{SA_DIR}/token", encoding="utf-8") as fh:
+            token = fh.read().strip()
+        try:
+            with open(f"{SA_DIR}/namespace", encoding="utf-8") as fh:
+                ns = fh.read().strip() or "kirocrew"
+        except OSError:
+            ns = "kirocrew"
+        host = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+        port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+        api = f"https://{host}:{port}/apis/apps/v1/namespaces/{ns}/deployments/{CREW_DEPLOYMENT}"
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        body = json.dumps({"spec": {"template": {"metadata": {"annotations": {
+            "kubectl.kubernetes.io/restartedAt": stamp}}}}}).encode("utf-8")
+        req = urllib.request.Request(api, data=body, method="PATCH", headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/strategic-merge-patch+json",
+            "Accept": "application/json",
+        })
+        ctx = ssl.create_default_context(cafile=f"{SA_DIR}/ca.crt")
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:  # noqa: S310
+            if resp.status not in (200, 201):
+                raise RuntimeError(f"HTTP {resp.status}")
+
     def account_body(error: str = "") -> str:
         with ACCT_LOCK:
             st = dict(ACCT)
@@ -404,9 +434,11 @@ data:
             return (
                 '<p class="sub">Sesión iniciada</p>'
                 f'<div class="acct-row">Cuenta: <b>{ident}</b></div>'
-                '<p class="hint">Reinicia Crew para aplicar el cambio:</p>'
+                '<p class="hint">Aplica el cambio reiniciando Crew:</p>'
+                '<form method="post" action="/account/restart"><button class="submit" type="submit">Reiniciar Crew ahora</button></form>'
+                '<p class="hint">o manualmente:</p>'
                 '<div class="code">kubectl -n kirocrew rollout restart deploy/kirocrew</div>'
-                f'<a class="submit" href="{pub}/">Ir al panel</a>'
+                f'<a class="submit ghost" href="{pub}/">Ir al panel</a>'
                 '<a class="ghostlink" href="/account">Volver a Cuenta</a>'
             )
         ident = html.escape(current_identity())
@@ -560,6 +592,19 @@ data:
                 except Exception:  # noqa: BLE001
                     pass
                 self._redirect("/account")
+                return
+            if path == "/account/restart":
+                if not self._authed():
+                    self._redirect("/account")
+                    return
+                try:
+                    restart_crew()
+                    self._send(200, render(notice_body(
+                        "Reiniciando Crew… en unos segundos el panel vuelve con la cuenta activa.")))
+                except Exception as exc:  # noqa: BLE001
+                    self._send(502, render(notice_body(
+                        f"No pude reiniciar Crew: {exc}. Usa: "
+                        "kubectl -n kirocrew rollout restart deploy/kirocrew")))
                 return
             # "/" — login de acceso
             user = (form.get("user", [""])[0]).strip()

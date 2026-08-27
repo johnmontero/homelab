@@ -187,8 +187,12 @@ gestionar la cuenta de `kiro-cli`:
 - El login del shim es **único**: el acceso al panel y `/account` comparten la misma
   cookie de sesión, así que la contraseña se pide una sola vez. Hay enlaces "← Volver"
   entre pantallas.
-- Al terminar, recuerda **reiniciar Crew** para aplicar:
-  `kubectl -n kirocrew rollout restart deploy/kirocrew` (reinicio manual, sin RBAC extra).
+- Al terminar hay que **reiniciar Crew** para aplicar (las sesiones en pool guardan la
+  identidad anterior hasta reciclar). Dos formas, usa la que prefieras:
+  - **Botón "Reiniciar Crew ahora"** en la pantalla de éxito (hace `rollout restart` vía
+    la API con un RBAC **acotado**: `Role kirocrew-self-rollout` permite solo
+    `get`/`patch` del deployment `kirocrew`, ver `rbac.yaml`).
+  - **Manual:** `kubectl -n kirocrew rollout restart deploy/kirocrew`.
 
 Cómo funciona: el sidecar corre `kiro-cli login … --use-device-flow` y escribe la sesión
 en el **PVC compartido** (por eso el sidecar monta `home` en **RW**). No usa `kubectl
