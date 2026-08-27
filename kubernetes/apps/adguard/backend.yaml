@@ -1,0 +1,44 @@
+# Backend "sin selector" para un endpoint FUERA del clúster: la UI de AdGuard Home,
+# que corre nativa en el host ZimaBoard (10.0.1.1:3001), no como pod.
+#
+# Patrón estándar de Gateway API para destinos externos: un Service sin selector
+# (k8s no le crea Endpoints solo) + un EndpointSlice manual que apunta a la IP:puerto
+# reales. El Envoy Gateway lee ese EndpointSlice y enruta el HTTPRoute hacia 10.0.1.1:3001.
+#
+# OJO: al no haber selector, el EndpointSlice NO se reconcilia solo. Si AdGuard cambia
+# de IP/puerto, hay que editarlo a mano.
+apiVersion: v1
+kind: Service
+metadata:
+  name: adguard
+  namespace: adguard
+  labels:
+    app: adguard
+spec:
+  type: ClusterIP
+  # sin selector: los endpoints los define el EndpointSlice de abajo
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: adguard-host
+  namespace: adguard
+  labels:
+    # enlaza este slice con el Service "adguard" (obligatorio)
+    kubernetes.io/service-name: adguard
+    app: adguard
+addressType: IPv4
+ports:
+  - name: http          # debe coincidir con el nombre de puerto del Service
+    port: 3001
+    protocol: TCP
+endpoints:
+  - addresses:
+      - 10.0.1.1        # ZimaBoard (LAN, IP estática) — AdGuard escucha aquí en :3001
+    conditions:
+      ready: true
