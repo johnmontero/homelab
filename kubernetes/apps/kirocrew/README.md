@@ -182,8 +182,11 @@ gestionar la cuenta de `kiro-cli`:
 
 - Muestra la **cuenta activa** (`kiro-cli user whoami`).
 - Permite elegir **Builder ID** (free) o **SSO / Identity Center** (pro, con *start URL*
-  + región) y ejecuta el **device flow**: muestra el enlace + código de verificación y
-  hace polling hasta confirmar.
+  + región) y ejecuta el **device flow**: muestra el enlace + código de verificación,
+  hace polling hasta confirmar y ofrece **Cancelar**.
+- El login del shim es **único**: el acceso al panel y `/account` comparten la misma
+  cookie de sesión, así que la contraseña se pide una sola vez. Hay enlaces "← Volver"
+  entre pantallas.
 - Al terminar, recuerda **reiniciar Crew** para aplicar:
   `kubectl -n kirocrew rollout restart deploy/kirocrew` (reinicio manual, sin RBAC extra).
 

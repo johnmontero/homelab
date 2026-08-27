@@ -59,6 +59,8 @@ data:
     # Estado del login de cuenta en curso (device flow). Un login a la vez.
     ACCT_LOCK = threading.Lock()
     ACCT = {"active": False, "state": "idle", "url": "", "code": "", "message": "", "identity": ""}
+    # Control del subproceso (fuera de ACCT: no es serializable a JSON).
+    CTRL = {"proc": None, "cancel": False}
 
     # --- estilo Kiro Crew (tema oscuro, acento violeta, Space Grotesk) -------------
     SHELL = """<!doctype html>
@@ -280,7 +282,10 @@ data:
         except Exception as exc:  # noqa: BLE001
             with ACCT_LOCK:
                 ACCT.update(active=False, state="error", message=f"No pude ejecutar kiro-cli: {exc}")
+                CTRL["proc"] = None
             return
+        with ACCT_LOCK:
+            CTRL["proc"], CTRL["cancel"] = proc, False
         start = time.time()
         try:
             for line in proc.stdout:  # type: ignore[union-attr]
@@ -300,10 +305,16 @@ data:
         except Exception:  # noqa: BLE001
             pass
         rc = proc.wait()
+        with ACCT_LOCK:
+            cancelled = CTRL["cancel"]
+            CTRL["proc"], CTRL["cancel"] = None, False
         ident = current_identity()
         with ACCT_LOCK:
             ACCT["identity"] = ident
-            if rc == 0:
+            if cancelled:
+                ACCT.update(active=False, state="idle", url="", code="",
+                            message="Cancelado. La sesión anterior se cerró; inicia sesión con una cuenta.")
+            elif rc == 0:
                 ACCT.update(active=False, state="success", message="Sesión iniciada. Reinicia Crew para aplicar.")
             else:
                 tail = " ".join(buf.strip().splitlines()[-3:]) if buf.strip() else ""
@@ -333,6 +344,7 @@ data:
                 f'<div class="code">{code}</div>'
                 f'{link}'
                 '<p class="hint">Esperando confirmación…</p>'
+                '<form method="post" action="/account/cancel"><button class="submit ghost" type="submit">Cancelar</button></form>'
                 '<script>setInterval(function(){fetch("/account/status")'
                 '.then(function(r){return r.json();}).then(function(s){'
                 'if(s.state==="success"||s.state==="error"){location.reload();}});},3000);</script>'
@@ -473,6 +485,21 @@ data:
                     self._send(400, render(account_body("Start URL o región inválidos.")))
                     return
                 start_login(method, url, region)
+                self._redirect("/account")
+                return
+            if path == "/account/cancel":
+                if not self._authed():
+                    self._redirect("/account")
+                    return
+                with ACCT_LOCK:
+                    proc = CTRL["proc"]
+                    if proc is not None:
+                        CTRL["cancel"] = True
+                if proc is not None:
+                    try:
+                        proc.terminate()
+                    except Exception:  # noqa: BLE001
+                        pass
                 self._redirect("/account")
                 return
             if path == "/account/logout":
