@@ -45,6 +45,12 @@ spec:
           env:
             - name: KIROCREW_PORT     # explícito por robustez (además de enableServiceLinks:false)
               value: "5476"
+            # Añade crew.home.lab a la allowlist de Host/origins del dashboard. Sin esto,
+            # Crew responde "403 Host header not allowed" a cualquier acceso que no sea
+            # localhost (defensa anti DNS-rebinding). Es lo que habilita el acceso por el
+            # Gateway (ver httproute.yaml y README). La imagen ya trae KIROCREW_BIND=0.0.0.0.
+            - name: KIROCREW_CORS_ORIGINS
+              value: "http://crew.home.lab"
           ports:
             - name: http
               containerPort: 5476

@@ -17,14 +17,18 @@ skills, lecciones, jobs) en el homelab usando la imagen oficial multi-arch
 | `pvc.yaml` | PVC `kirocrew-home` (15Gi, `local-path`) → `/home/kirocrew` (TODO el estado) |
 | `deployment.yaml` | Deployment 1 réplica, `Recreate`, fijado a nodo amd64, seccomp `Unconfined` |
 | `service.yaml` | Service ClusterIP :5476 (solo útil con bind de red + token; ver abajo) |
+| `httproute.yaml` | HTTPRoute `crew.home.lab` → Service :5476 vía `homelab-gateway` (requiere bind + token) |
+| `rbac.yaml` | SA `kirocrew-deployer` + Role/RoleBinding para CI→rollout de PIVAS (ns `pivas`) |
 
 ## Orden de aplicación
 
 ```bash
 kubectl apply -f namespace.yaml
 kubectl apply -f pvc.yaml
+kubectl apply -f rbac.yaml
 kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml   # opcional (ver nota de acceso)
+kubectl apply -f service.yaml     # opcional (ver nota de acceso)
+kubectl apply -f httproute.yaml   # opcional — solo con bind de red + token (ver "Acceso")
 ```
 
 ## Primer arranque (login de kiro-cli)
@@ -54,9 +58,47 @@ kubectl -n kirocrew port-forward deploy/kirocrew 5476:5476
 # abre http://localhost:5476
 ```
 
-Para usar el `Service`/Gateway en su lugar, hay que habilitar **bind de red + auth por
-token** en la config de Crew (Settings del dashboard). Solo entonces tiene sentido
-agregar un `HTTPRoute` (Envoy Gateway `homelab-gateway`) o probes HTTP al Deployment.
+### Acceso por el Gateway (crew.home.lab)
+
+La imagen ya arranca con `KIROCREW_BIND=0.0.0.0` (escucha en red, no solo loopback),
+así que el pod es alcanzable por su podIP. El bloqueo real es la **allowlist de Host**
+del dashboard: rechaza cualquier `Host` que no sirva con `403 Host header not allowed`
+(defensa anti DNS-rebinding). Por defecto solo permite `localhost`/`127.0.0.1`, por eso
+el port-forward funciona pero `crew.home.lab` no.
+
+Para permitir `crew.home.lab` hay que añadirlo a esa allowlist. Crew la deriva de sus
+*allowed origins*, que se pueden ampliar con la env `KIROCREW_CORS_ORIGINS` (lista
+separada por comas). El Deployment ya la incluye:
+
+```yaml
+env:
+  - name: KIROCREW_CORS_ORIGINS
+    value: "http://crew.home.lab"
+```
+
+Pasos:
+
+1. Aplicar el Deployment (ya trae la env), el `Service` y el `HTTPRoute`:
+   ```bash
+   kubectl apply -f deployment.yaml
+   kubectl apply -f service.yaml
+   kubectl apply -f httproute.yaml
+   ```
+2. Crear el DNS rewrite en AdGuard: `crew.home.lab → 192.168.18.220` (IP del Gateway).
+
+Verificar el enrutado:
+```bash
+kubectl -n kirocrew get httproute kirocrew-route -o wide
+# desde la LAN, contra la IP del gateway (debe dar 200/302, no 403):
+curl -H 'Host: crew.home.lab' http://192.168.18.220/
+# abre http://crew.home.lab
+```
+
+> **Seguridad:** en este setup el dashboard **no exige token de red** por defecto.
+> Publicar `crew.home.lab` en la LAN da acceso a un agente que puede ejecutar
+> herramientas dentro del clúster (incluido el `rollout restart` de PIVAS vía su SA).
+> Limita el acceso a la LAN de confianza y considera poner auth delante (p. ej. en el
+> Gateway) si la LAN no es de fiar.
 
 ## Caveat del sandbox (importante)
 

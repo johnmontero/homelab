@@ -1,0 +1,31 @@
+# Expone Kiro Crew en crew.home.lab a través del Envoy Gateway (homelab-gateway,
+# ns default, IP MetalLB 192.168.18.220). Requiere un DNS rewrite en AdGuard:
+#   crew.home.lab → 192.168.18.220
+#
+# IMPORTANTE (prerrequisito): la imagen ya arranca con KIROCREW_BIND=0.0.0.0 (bind
+# de red), pero el dashboard rechaza cualquier Host que no esté en su allowlist
+# ("403 Host header not allowed"). Hay que añadir crew.home.lab a esa lista con la
+# env KIROCREW_CORS_ORIGINS=http://crew.home.lab en el Deployment (ver deployment.yaml
+# y README.md, sección "Acceso"). El dashboard NO exige token de red por defecto en
+# este setup: exponerlo en la LAN da acceso a un agente con RBAC en el clúster.
+#
+# Timeouts amplios: las sesiones de agente usan streaming/websockets de larga vida.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kirocrew-route
+  namespace: kirocrew
+spec:
+  parentRefs:
+    - name: homelab-gateway
+      namespace: default
+      sectionName: http
+  hostnames:
+    - crew.home.lab
+  rules:
+    - backendRefs:
+        - name: kirocrew
+          port: 5476
+      timeouts:
+        backendRequest: 300s
+        request: 300s
