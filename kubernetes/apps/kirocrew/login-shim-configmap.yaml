@@ -425,9 +425,9 @@ data:
                 f'{link}'
                 '<p class="hint">Esperando confirmación…</p>'
                 '<form method="post" action="/account/cancel"><button class="submit ghost" type="submit">Cancelar</button></form>'
-                '<script>setInterval(function(){fetch("/account/status")'
+                '<script>var R="' + state + '";setInterval(function(){fetch("/account/status")'
                 '.then(function(r){return r.json();}).then(function(s){'
-                'if(s.state==="success"||s.state==="error"){location.reload();}});},3000);</script>'
+                'if(s.state!==R){location.reload();}});},2500);</script>'
             )
         if state == "success":
             ident = html.escape(st.get("identity") or "")
