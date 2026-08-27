@@ -174,6 +174,28 @@ deja dentro del dashboard ya autenticado. La cookie de refresh (~30 días) hace 
 pasada la primera vez, ir directo a `http://crew.home.lab/` también funcione hasta que
 expire.
 
+#### Cambiar de cuenta (Builder ID / SSO) — `/account`
+
+En la OSS de Crew el login SSO del dashboard está deshabilitado (stub "not available in
+OSS"). Por eso el shim añade una página **`/account`** (detrás del mismo login) para
+gestionar la cuenta de `kiro-cli`:
+
+- Muestra la **cuenta activa** (`kiro-cli user whoami`).
+- Permite elegir **Builder ID** (free) o **SSO / Identity Center** (pro, con *start URL*
+  + región) y ejecuta el **device flow**: muestra el enlace + código de verificación y
+  hace polling hasta confirmar.
+- Al terminar, recuerda **reiniciar Crew** para aplicar:
+  `kubectl -n kirocrew rollout restart deploy/kirocrew` (reinicio manual, sin RBAC extra).
+
+Cómo funciona: el sidecar corre `kiro-cli login … --use-device-flow` y escribe la sesión
+en el **PVC compartido** (por eso el sidecar monta `home` en **RW**). No usa `kubectl
+exec` ni RBAC nuevo. Cambiar de cuenta **cierra la sesión actual** (identidad única por
+instancia). El `start URL`/región se validan y se pasan como argv (sin shell).
+
+> El acceso a `/account` está protegido por el mismo login del shim (cookie de sesión
+> firmada). Igual que el auto-login, va en HTTP plano por la LAN: mantenlo en red de
+> confianza.
+
 ## Caveat del sandbox (importante)
 
 El agente prueba un sandbox con **user namespaces** (`unshare/clone`). Bajo containerd

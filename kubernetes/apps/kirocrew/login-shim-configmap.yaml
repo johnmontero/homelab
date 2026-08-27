@@ -21,12 +21,16 @@ data:
     """Auto-login shim para el dashboard de Kiro Crew (ver ConfigMap)."""
     from __future__ import annotations
     import base64
+    import hashlib
     import hmac
     import html
     import json
     import os
     import re
+    import subprocess
     import sys
+    import threading
+    import time
     import urllib.parse
     import urllib.request
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -41,8 +45,20 @@ data:
     LOGIN_PASS = os.environ.get("LOGIN_SHIM_PASSWORD", "")
     ALLOW_OPEN = os.environ.get("LOGIN_SHIM_ALLOW_OPEN", "").lower() in ("1", "true", "yes")
     LOGO_URL = os.environ.get("LOGIN_SHIM_LOGO_URL", PUBLIC_URL + "/logo.png")
+    KIROCLI = os.environ.get("KIROCLI_BIN", "kiro-cli")
+    SESS_COOKIE = "shim_sess"
+    SESS_TTL = int(os.environ.get("LOGIN_SHIM_SESSION_TTL", "43200"))  # 12h
 
     TOKEN_RE = re.compile(r"[?&]token=([^\s&]+)")
+    # Parser genérico del device flow: cualquier URL https y un código tipo XXXX-XXXX.
+    URL_RE = re.compile(r"https?://[^\s'\"]+")
+    CODE_RE = re.compile(r"\b[A-Z0-9]{4}-[A-Z0-9]{4}\b")
+    IDP_RE = re.compile(r"^https://[A-Za-z0-9.-]+(/[^\s]*)?$")
+    REGION_RE = re.compile(r"^[a-z0-9-]{3,40}$")
+
+    # Estado del login de cuenta en curso (device flow). Un login a la vez.
+    ACCT_LOCK = threading.Lock()
+    ACCT = {"active": False, "state": "idle", "url": "", "code": "", "message": "", "identity": ""}
 
     # --- estilo Kiro Crew (tema oscuro, acento violeta, Space Grotesk) -------------
     SHELL = """<!doctype html>
@@ -106,19 +122,36 @@ data:
         transition:border-color .15s, box-shadow .15s;
       }
       input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(168,85,247,.25)}
-      button.submit{
+      .submit{
         margin-top:6px; width:100%; border:0; cursor:pointer; color:#fff; font:inherit; font-weight:600;
         padding:12px; border-radius:10px; font-size:14px;
         background:linear-gradient(180deg,var(--accent),var(--accent2));
         transition:filter .15s, transform .02s;
       }
-      button.submit:hover{filter:brightness(1.08)}
-      button.submit:active{transform:translateY(1px)}
+      a.submit{display:block; text-align:center; text-decoration:none; box-sizing:border-box}
+      .submit:hover{filter:brightness(1.08)}
+      .submit:active{transform:translateY(1px)}
+      .submit.ghost, a.ghostlink{
+        background:transparent; color:var(--muted); border:1px solid var(--border);
+      }
+      .submit.ghost:hover, a.ghostlink:hover{color:var(--text); border-color:var(--accent); filter:none}
+      a.ghostlink{display:block; text-align:center; text-decoration:none; margin-top:10px; padding:9px; border-radius:10px; font-size:12px}
       .err{
         background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.35); color:#ef4444;
         border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:4px;
       }
+      .acct-row{font-size:13px; color:var(--muted); text-align:center; margin:0 0 16px; word-break:break-word}
+      .acct-row b{color:var(--text)}
+      .seg{display:flex; flex-direction:column; gap:8px; font-size:13px; margin-bottom:4px}
+      .seg label{display:flex; align-items:center; gap:8px; color:var(--text); margin:0; cursor:pointer}
+      .code{
+        font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;
+        background:var(--field); border:1px solid var(--border); border-radius:10px;
+        padding:12px; text-align:center; font-size:15px; letter-spacing:.05em; word-break:break-all; margin:8px 0;
+      }
+      .hint{color:var(--muted); font-size:12px; text-align:center; margin:8px 0 0}
       .foot{margin-top:20px; text-align:center; color:var(--muted); font-size:11px}
+      .foot a{color:var(--muted)}
     </style>
     </head>
     <body>
@@ -170,26 +203,178 @@ data:
     def render(body: str) -> bytes:
         return SHELL.replace("__LOGO__", html.escape(LOGO_URL, quote=True)).replace("__BODY__", body).encode("utf-8")
 
-    def login_body(error: str = "", user: str = "") -> str:
-        user = html.escape(user or LOGIN_USER, quote=True)
+    def login_body(error: str = "", user: str = "", next_: str = "") -> str:
+        user_v = html.escape(user or LOGIN_USER, quote=True)
         err = f'<div class="err">{html.escape(error)}</div>' if error else ""
+        nxt = f'<input type="hidden" name="next" value="{html.escape(next_, quote=True)}">' if next_ else ""
+        sub = "Inicia sesión para gestionar la cuenta" if next_ == "account" else "Inicia sesión para acceder al panel"
+        link = "" if next_ == "account" else '<a class="ghostlink" href="/account">Gestionar cuenta de Kiro</a>'
         return (
-            '<p class="sub">Inicia sesión para acceder al panel</p>'
+            f'<p class="sub">{sub}</p>'
             f'{err}'
             '<form method="post" action="/">'
+            f'{nxt}'
             '<label for="u">Usuario</label>'
-            f'<input id="u" name="user" value="{user}" autocomplete="username" autocapitalize="off" spellcheck="false">'
+            f'<input id="u" name="user" value="{user_v}" autocomplete="username" autocapitalize="off" spellcheck="false">'
             '<label for="p">Contraseña</label>'
             '<input id="p" name="password" type="password" autocomplete="current-password" autofocus>'
             '<button class="submit" type="submit">Entrar</button>'
             '</form>'
+            f'{link}'
         )
 
     def notice_body(msg: str) -> str:
         return f'<p class="sub">{html.escape(msg)}</p>'
 
+    # --- sesión propia del shim (cookie firmada con el password) -------------------
+    def _sess_sign(msg: str) -> str:
+        return hmac.new((LOGIN_PASS or "disabled").encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+    def make_session() -> str:
+        exp = str(int(time.time()) + SESS_TTL)
+        return exp + "." + _sess_sign(exp)
+
+    def valid_session(val: str) -> bool:
+        try:
+            exp, sig = (val or "").split(".", 1)
+        except ValueError:
+            return False
+        if not hmac.compare_digest(sig, _sess_sign(exp)):
+            return False
+        try:
+            return int(exp) > int(time.time())
+        except ValueError:
+            return False
+
+    def _cookie(header: str, name: str) -> str:
+        m = re.search(r"(?:^|;\s*)" + re.escape(name) + r"=([^;]+)", header or "")
+        return m.group(1) if m else ""
+
+    # --- gestión de cuenta (kiro-cli, device flow) --------------------------------
+    def current_identity() -> str:
+        try:
+            out = subprocess.run([KIROCLI, "user", "whoami"], capture_output=True, text=True, timeout=12)
+            txt = (out.stdout or out.stderr or "").strip()
+            joined = " · ".join(l.strip() for l in txt.splitlines() if l.strip())
+            return joined[:200] or "desconocida"
+        except Exception as exc:  # noqa: BLE001
+            return f"no disponible ({exc})"
+
+    def run_login(method: str, url: str, region: str) -> None:
+        # kiro-cli rechaza login si ya hay sesión: cerrar primero (cambiar = re-login).
+        try:
+            subprocess.run([KIROCLI, "logout"], capture_output=True, text=True, timeout=40)
+        except Exception:  # noqa: BLE001
+            pass
+        if method == "sso":
+            cmd = [KIROCLI, "login", "--license", "pro",
+                   "--identity-provider", url, "--region", region, "--use-device-flow"]
+        else:
+            cmd = [KIROCLI, "login", "--license", "free", "--use-device-flow"]
+        with ACCT_LOCK:
+            ACCT.update(state="pending", message="Solicitando código…")
+        buf = ""
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        except Exception as exc:  # noqa: BLE001
+            with ACCT_LOCK:
+                ACCT.update(active=False, state="error", message=f"No pude ejecutar kiro-cli: {exc}")
+            return
+        start = time.time()
+        try:
+            for line in proc.stdout:  # type: ignore[union-attr]
+                buf += line
+                mu = URL_RE.search(buf)
+                mc = CODE_RE.search(buf)
+                with ACCT_LOCK:
+                    if mu and not ACCT["url"]:
+                        ACCT["url"] = mu.group(0)
+                    if mc and not ACCT["code"]:
+                        ACCT["code"] = mc.group(0)
+                    if ACCT["url"]:
+                        ACCT.update(state="prompt", message="Abre el enlace y confirma el código.")
+                if time.time() - start > 600:
+                    proc.kill()
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+        rc = proc.wait()
+        ident = current_identity()
+        with ACCT_LOCK:
+            ACCT["identity"] = ident
+            if rc == 0:
+                ACCT.update(active=False, state="success", message="Sesión iniciada. Reinicia Crew para aplicar.")
+            else:
+                tail = " ".join(buf.strip().splitlines()[-3:]) if buf.strip() else ""
+                ACCT.update(active=False, state="error", message=("El login falló o expiró. " + tail).strip())
+
+    def start_login(method: str, url: str, region: str) -> bool:
+        with ACCT_LOCK:
+            if ACCT["active"]:
+                return False
+            ACCT.update(active=True, state="starting", url="", code="", message="Cerrando sesión anterior…", identity="")
+        threading.Thread(target=run_login, args=(method, url, region), daemon=True).start()
+        return True
+
+    def account_body(error: str = "") -> str:
+        with ACCT_LOCK:
+            st = dict(ACCT)
+        state = st.get("state", "idle")
+        if st.get("active") or state in ("starting", "pending", "prompt"):
+            code = html.escape(st.get("code") or "…")
+            url = html.escape(st.get("url") or "", quote=True)
+            msg = html.escape(st.get("message") or "Solicitando código…")
+            link = (f'<a class="submit" href="{url}" target="_blank" rel="noopener">Abrir verificación</a>'
+                    if url else "")
+            return (
+                '<p class="sub">Confirma el acceso a tu cuenta</p>'
+                f'<p class="hint">{msg}</p>'
+                f'<div class="code">{code}</div>'
+                f'{link}'
+                '<p class="hint">Esperando confirmación…</p>'
+                '<script>setInterval(function(){fetch("/account/status")'
+                '.then(function(r){return r.json();}).then(function(s){'
+                'if(s.state==="success"||s.state==="error"){location.reload();}});},3000);</script>'
+            )
+        if state == "success":
+            ident = html.escape(st.get("identity") or "")
+            pub = html.escape(PUBLIC_URL, quote=True)
+            return (
+                '<p class="sub">Sesión iniciada</p>'
+                f'<div class="acct-row">Cuenta: <b>{ident}</b></div>'
+                '<p class="hint">Reinicia Crew para aplicar el cambio:</p>'
+                '<div class="code">kubectl -n kirocrew rollout restart deploy/kirocrew</div>'
+                f'<a class="submit" href="{pub}/">Ir al panel</a>'
+                '<a class="ghostlink" href="/account">Volver a Cuenta</a>'
+            )
+        ident = html.escape(current_identity())
+        emsg = error or (st.get("message", "") if state == "error" else "")
+        err = f'<div class="err">{html.escape(emsg)}</div>' if emsg else ""
+        return (
+            '<p class="sub">Gestiona la cuenta de Kiro</p>'
+            f'<div class="acct-row">Cuenta actual: <b>{ident}</b></div>'
+            f'{err}'
+            '<form method="post" action="/account/start">'
+            '<label>Método</label>'
+            '<div class="seg">'
+            '<label><input type="radio" name="method" value="sso" checked onclick="ssoFields(true)"> SSO / Identity Center</label>'
+            '<label><input type="radio" name="method" value="builderid" onclick="ssoFields(false)"> Builder ID</label>'
+            '</div>'
+            '<div id="ssof">'
+            '<label for="url">Start URL</label>'
+            '<input id="url" name="url" placeholder="https://mi-org.awsapps.com/start" autocapitalize="off" spellcheck="false">'
+            '<label for="rg">Región</label>'
+            '<input id="rg" name="region" placeholder="us-east-1" autocapitalize="off" spellcheck="false">'
+            '</div>'
+            '<button class="submit" type="submit">Iniciar sesión con esta cuenta</button>'
+            '</form>'
+            '<p class="hint">Cambiar de cuenta cierra la sesión actual.</p>'
+            '<form method="post" action="/account/logout"><button class="submit ghost" type="submit">Cerrar sesión actual</button></form>'
+            '<script>function ssoFields(on){document.getElementById("ssof").style.display=on?"":"none";}</script>'
+        )
+
     class Handler(BaseHTTPRequestHandler):
-        server_version = "crew-login-shim/2"
+        server_version = "crew-login-shim/3"
 
         def _send(self, code: int, body: bytes, ctype="text/html; charset=utf-8", extra=None):
             self.send_response(code)
@@ -202,27 +387,40 @@ data:
             if body:
                 self.wfile.write(body)
 
-        def _redirect(self, location: str):
+        def _redirect(self, location: str, cookie: str = ""):
             self.send_response(303)
             self.send_header("Location", location)
+            if cookie:
+                self.send_header("Set-Cookie", cookie)
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", "0")
             self.end_headers()
 
-        def _enter(self):
-            """Mintea y entra (usado tras login válido o en modo abierto)."""
+        def _authed(self) -> bool:
+            if ALLOW_OPEN and not LOGIN_PASS:
+                return True
+            return valid_session(_cookie(self.headers.get("Cookie", ""), SESS_COOKIE))
+
+        def _enter(self, cookie: str = ""):
+            """Mintea el token de Crew y redirige al panel."""
             try:
                 token = mint_token()
             except Exception as exc:  # noqa: BLE001
                 self._send(502, render(notice_body(f"No pude iniciar sesión: {exc}")))
                 return
-            self._redirect(f"{PUBLIC_URL}/?token={token}")
+            self._redirect(f"{PUBLIC_URL}/?token={token}", cookie)
+
+        def _read_form(self):
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw = self.rfile.read(length).decode("utf-8", "replace") if length else ""
+            return urllib.parse.parse_qs(raw)
 
         def do_GET(self):
-            if self.path.startswith("/healthz"):
+            path = self.path.split("?", 1)[0]
+            if path.startswith("/healthz"):
                 self._send(200, b"ok", "text/plain; charset=utf-8")
                 return
-            if self.path.startswith("/favicon"):
+            if path.startswith("/favicon"):
                 self._send(204, b"")
                 return
             if not LOGIN_PASS and not ALLOW_OPEN:
@@ -230,10 +428,28 @@ data:
                     "Auto-login desactivado. Define LOGIN_SHIM_PASSWORD (recomendado) "
                     "o LOGIN_SHIM_ALLOW_OPEN=true.")))
                 return
+            if path == "/account/status":
+                if not self._authed():
+                    self._send(401, b'{"state":"unauth"}', "application/json")
+                    return
+                with ACCT_LOCK:
+                    st = dict(ACCT)
+                self._send(200, json.dumps(st).encode("utf-8"), "application/json")
+                return
+            if path == "/account":
+                if not self._authed():
+                    self._send(200, render(login_body(next_="account")))
+                    return
+                self._send(200, render(account_body()))
+                return
+            # "/" — acceso al panel
             if _has_session(self.headers.get("Cookie", "")):
                 self._redirect(PUBLIC_URL + "/")
                 return
             if ALLOW_OPEN and not LOGIN_PASS:
+                self._enter()
+                return
+            if self._authed():
                 self._enter()
                 return
             self._send(200, render(login_body()))
@@ -242,18 +458,46 @@ data:
             if not LOGIN_PASS and not ALLOW_OPEN:
                 self._send(503, render(notice_body("Auto-login desactivado.")))
                 return
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            raw = self.rfile.read(length).decode("utf-8", "replace") if length else ""
-            form = urllib.parse.parse_qs(raw)
+            path = self.path.split("?", 1)[0]
+            form = self._read_form()
+            if path == "/account/start":
+                if not self._authed():
+                    self._redirect("/account")
+                    return
+                method = (form.get("method", ["sso"])[0]).strip()
+                url = (form.get("url", [""])[0]).strip()
+                region = (form.get("region", [""])[0]).strip()
+                if method == "sso" and (not IDP_RE.match(url) or not REGION_RE.match(region)):
+                    self._send(400, render(account_body("Start URL o región inválidos.")))
+                    return
+                start_login(method, url, region)
+                self._redirect("/account")
+                return
+            if path == "/account/logout":
+                if not self._authed():
+                    self._redirect("/account")
+                    return
+                try:
+                    subprocess.run([KIROCLI, "logout"], capture_output=True, text=True, timeout=40)
+                except Exception:  # noqa: BLE001
+                    pass
+                self._redirect("/account")
+                return
+            # "/" — login de acceso
             user = (form.get("user", [""])[0]).strip()
             pw = form.get("password", [""])[0]
+            nxt = (form.get("next", [""])[0]).strip()
             if ALLOW_OPEN and not LOGIN_PASS:
                 self._enter()
                 return
             if not _creds_ok(user, pw):
-                self._send(401, render(login_body("Usuario o contraseña incorrectos.", user)))
+                self._send(401, render(login_body("Usuario o contraseña incorrectos.", user, nxt)))
                 return
-            self._enter()
+            cookie = f"{SESS_COOKIE}={make_session()}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESS_TTL}"
+            if nxt == "account":
+                self._redirect("/account", cookie)
+                return
+            self._enter(cookie)
 
         def log_message(self, fmt, *args):
             sys.stderr.write("login-shim %s - %s\n" % (self.address_string(), fmt % args))
