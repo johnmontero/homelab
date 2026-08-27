@@ -208,7 +208,8 @@ data:
         err = f'<div class="err">{html.escape(error)}</div>' if error else ""
         nxt = f'<input type="hidden" name="next" value="{html.escape(next_, quote=True)}">' if next_ else ""
         sub = "Inicia sesión para gestionar la cuenta" if next_ == "account" else "Inicia sesión para acceder al panel"
-        link = "" if next_ == "account" else '<a class="ghostlink" href="/account">Gestionar cuenta de Kiro</a>'
+        link = ('<a class="ghostlink" href="/">← Volver al acceso</a>' if next_ == "account"
+                else '<a class="ghostlink" href="/account">Gestionar cuenta de Kiro</a>')
         return (
             f'<p class="sub">{sub}</p>'
             f'{err}'
@@ -370,6 +371,7 @@ data:
             '</form>'
             '<p class="hint">Cambiar de cuenta cierra la sesión actual.</p>'
             '<form method="post" action="/account/logout"><button class="submit ghost" type="submit">Cerrar sesión actual</button></form>'
+            '<a class="ghostlink" href="/">← Volver al acceso al panel</a>'
             '<script>function ssoFields(on){document.getElementById("ssof").style.display=on?"":"none";}</script>'
         )
 
