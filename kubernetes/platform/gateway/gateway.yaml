@@ -2,7 +2,12 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   annotations:
-    metallb.io/loadBalancerIPs: 192.168.18.221
+    # NOTA: Envoy Gateway NO propaga las anotaciones del recurso Gateway al Service
+    # LoadBalancer que genera, así que esta anotación es informativa: MetalLB
+    # auto-asigna desde homelab-pool y hoy la IP efectiva es 192.168.18.220
+    # (ver `kubectl -n envoy-gateway-system get svc`). Para fijarla de verdad hay que
+    # anotar el Service vía un recurso EnvoyProxy (provider.kubernetes.envoyService).
+    metallb.io/loadBalancerIPs: 192.168.18.220
   name: homelab-gateway
   namespace: default
 spec:

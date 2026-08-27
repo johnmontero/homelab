@@ -62,7 +62,7 @@ kubectl apply -f httproute.yaml
 
 ## Verificación
 
-- Interno (LAN): `curl -H 'Host: pivas.home.lab' http://192.168.18.221/` → 200/302.
+- Interno (LAN): `curl -H 'Host: pivas.home.lab' http://192.168.18.220/` → 200/302.
 - Externo (celular): abrir `https://pivas.nx73.app`, generar enlace de captura y
   probar cámara/subida de fotos. El video va por LiveKit Cloud; las fotos a
   `https://pivas-evidence.nx73.app` (RustFS).
