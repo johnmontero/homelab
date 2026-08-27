@@ -71,7 +71,66 @@ spec:
           # kubelet no lo alcanza por podIP. El acceso se hace por `kubectl port-forward`
           # (usa la loopback del pod). Si habilitas bind de red + token (ver README),
           # puedes agregar readiness/liveness httpGet en / :5476.
+
+        # ------------------------------------------------------------------------
+        # Sidecar "login-shim": auto-login para crew.home.lab. Mintea un token por
+        # loopback (comparte red y PVC con el contenedor principal) y redirige a la
+        # interfaz. Expuesto aparte en crew-login.home.lab (ver login-shim-*.yaml).
+        # OJO SEGURIDAD: mintear = saltarse la barrera de token de Crew. Por eso pide
+        # su propia basic-auth (Secret kirocrew-login-auth). Sin password y sin
+        # LOGIN_SHIM_ALLOW_OPEN, el shim queda DESACTIVADO (responde 503).
+        # ------------------------------------------------------------------------
+        - name: login-shim
+          image: ghcr.io/kirodotdev/kirocrew:stable   # misma imagen: trae python3 y el usuario dueño del secreto
+          imagePullPolicy: Always
+          command: ["python3", "/scripts/login_shim.py"]
+          env:
+            - name: CREW_PORT
+              value: "5476"
+            - name: CREW_PUBLIC_URL
+              value: "http://crew.home.lab"
+            - name: LOGIN_SHIM_PORT
+              value: "8088"
+            # basic-auth (recomendado). El password viene del Secret kirocrew-login-auth
+            # (opcional): si no existe, el shim queda desactivado salvo LOGIN_SHIM_ALLOW_OPEN.
+            - name: LOGIN_SHIM_USER
+              value: "crew"
+            - name: LOGIN_SHIM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kirocrew-login-auth
+                  key: password
+                  optional: true
+            # Descomenta para permitir mint SIN basic-auth (mintea a cualquiera en la LAN):
+            # - name: LOGIN_SHIM_ALLOW_OPEN
+            #   value: "true"
+          ports:
+            - name: shim
+              containerPort: 8088
+          volumeMounts:
+            - name: home
+              mountPath: /home/kirocrew
+              readOnly: true          # solo lee .local_secret; no escribe el estado de Crew
+            - name: login-shim
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8088
+            initialDelaySeconds: 3
+            periodSeconds: 10
       volumes:
         - name: home
           persistentVolumeClaim:
             claimName: kirocrew-home
+        - name: login-shim
+          configMap:
+            name: kirocrew-login-shim

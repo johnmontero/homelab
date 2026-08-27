@@ -1,0 +1,18 @@
+# Service del login-shim. Selecciona el MISMO pod de kirocrew (app: kirocrew) pero
+# apunta al puerto del sidecar (8088), no al dashboard (5476).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kirocrew-login
+  namespace: kirocrew
+  labels:
+    app: kirocrew
+spec:
+  type: ClusterIP
+  selector:
+    app: kirocrew
+  ports:
+    - name: shim
+      port: 8088
+      targetPort: 8088
+      protocol: TCP

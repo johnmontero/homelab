@@ -19,6 +19,10 @@ skills, lecciones, jobs) en el homelab usando la imagen oficial multi-arch
 | `service.yaml` | Service ClusterIP :5476 (solo útil con bind de red + token; ver abajo) |
 | `httproute.yaml` | HTTPRoute `crew.home.lab` → Service :5476 vía `homelab-gateway` (requiere bind + token) |
 | `rbac.yaml` | SA `kirocrew-deployer` + Role/RoleBinding para CI→rollout de PIVAS (ns `pivas`) |
+| `login-shim-configmap.yaml` | Script del sidecar de auto-login (mintea token y redirige) |
+| `login-shim-service.yaml` | Service `kirocrew-login` :8088 (mismo pod, puerto del sidecar) |
+| `login-shim-httproute.yaml` | HTTPRoute `crew-login.home.lab` → shim :8088 |
+| `login-shim-secret.example.yaml` | Plantilla del Secret `kirocrew-login-auth` (basic-auth del shim) |
 
 ## Orden de aplicación
 
@@ -28,7 +32,13 @@ kubectl apply -f pvc.yaml
 kubectl apply -f rbac.yaml
 kubectl apply -f deployment.yaml
 kubectl apply -f service.yaml     # opcional (ver nota de acceso)
-kubectl apply -f httproute.yaml   # opcional — solo con bind de red + token (ver "Acceso")
+kubectl apply -f httproute.yaml   # opcional — expone crew.home.lab (ver "Acceso")
+# Auto-login (opcional; ver "Auto-login"):
+kubectl apply -f login-shim-configmap.yaml
+kubectl apply -f login-shim-service.yaml
+kubectl apply -f login-shim-httproute.yaml
+# y el password del shim (NO versionado):
+kubectl -n kirocrew create secret generic kirocrew-login-auth --from-literal=password='TU_PASSWORD'
 ```
 
 ## Primer arranque (login de kiro-cli)
@@ -121,6 +131,45 @@ sin él responde `403`.
 > dentro del clúster (incluido el `rollout restart` de PIVAS vía su SA). El acceso va
 > en **HTTP plano** por el Gateway (token y cookies viajan sin cifrar): limítalo a una
 > LAN de confianza y, si no lo es, pon TLS/auth delante en el Gateway.
+
+### Auto-login (opcional): sidecar `login-shim`
+
+Para no tener que correr `kirocrew token` a mano, un **sidecar** en el mismo pod
+automatiza el flujo: al abrir su URL, si el navegador **no** trae la cookie de sesión,
+mintea un token por loopback (`/api/token/local`, usando el secreto local del PVC) y
+hace `302` a `http://crew.home.lab/?token=…`; si ya tienes cookie, redirige directo a
+la interfaz. Se expone en su **propio hostname** `crew-login.home.lab` (para no pisar
+rutas del SPA).
+
+Piezas: `login-shim-configmap.yaml` (script), sidecar en `deployment.yaml`,
+`login-shim-service.yaml` (:8088) y `login-shim-httproute.yaml` (`crew-login.home.lab`).
+
+> **⚠️ Seguridad — importante:** mintear un token **equivale a saltarse la barrera de
+> auth de Crew**. Un `/login` abierto dejaría entrar a cualquiera en la LAN que alcance
+> el Gateway. Por eso el shim tiene **tres modos**, según el Secret `kirocrew-login-auth`
+> y la env `LOGIN_SHIM_ALLOW_OPEN`:
+>
+> - **basic-auth** (recomendado): con el Secret puesto, el shim pide usuario/contraseña
+>   (usuario `crew` por defecto) y recién ahí mintea. El navegador cachea la credencial.
+> - **abierto**: `LOGIN_SHIM_ALLOW_OPEN=true` **sin** password → mintea a cualquiera.
+>   Úsalo solo en una LAN de plena confianza.
+> - **desactivado** (por defecto): sin password y sin `ALLOW_OPEN`, el shim responde
+>   `503`. No crea un endpoint abierto por accidente.
+
+Puesta en marcha:
+
+```bash
+# 1) password del shim (NO se versiona; ver login-shim-secret.example.yaml)
+kubectl -n kirocrew create secret generic kirocrew-login-auth --from-literal=password='TU_PASSWORD'
+# 2) recursos del shim
+kubectl apply -f login-shim-configmap.yaml -f login-shim-service.yaml -f login-shim-httproute.yaml
+kubectl apply -f deployment.yaml     # agrega el sidecar (reinicia el pod)
+# 3) DNS rewrite en AdGuard: crew-login.home.lab → 192.168.18.220
+```
+
+Uso: abre `http://crew-login.home.lab` (te pide la basic-auth una vez) y te deja dentro
+del dashboard ya autenticado. La cookie de refresh (~30 días) hace que, pasada la
+primera vez, ir directo a `http://crew.home.lab/` también funcione hasta que expire.
 
 ## Caveat del sandbox (importante)
 

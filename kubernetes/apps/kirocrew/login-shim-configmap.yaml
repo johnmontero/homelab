@@ -1,0 +1,136 @@
+# Script del "login-shim": un servidor mínimo (stdlib, sin dependencias) que corre
+# como sidecar en el pod de Kiro Crew. Al recibir una petición:
+#   - si el navegador ya trae la cookie de sesión de Crew -> 302 a la interfaz;
+#   - si no, MINTEA un token pidiéndoselo al gateway por loopback
+#     (127.0.0.1:5476/api/token/local con el secreto local del PVC) y hace 302 a
+#     http://crew.home.lab/?token=<token>, que canjea la cookie y entra.
+#
+# Como MINTEAR un token equivale a saltarse la barrera de auth de Crew, el shim
+# exige su PROPIA barrera (basic-auth) salvo que se active el modo abierto a mano.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kirocrew-login-shim
+  namespace: kirocrew
+  labels:
+    app: kirocrew
+data:
+  login_shim.py: |
+    #!/usr/bin/env python3
+    """Auto-login shim para el dashboard de Kiro Crew (ver ConfigMap)."""
+    from __future__ import annotations
+    import base64
+    import hmac
+    import json
+    import os
+    import re
+    import sys
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    PORT = int(os.environ.get("LOGIN_SHIM_PORT", "8088"))
+    CREW_PORT = int(os.environ.get("CREW_PORT", "5476"))
+    PUBLIC_URL = os.environ.get("CREW_PUBLIC_URL", "http://crew.home.lab").rstrip("/")
+    COOKIE_NAME = os.environ.get("CREW_SESSION_COOKIE", "mc_token_5476")
+    TTL = os.environ.get("LOGIN_SHIM_TTL", "20h")
+    HOME = os.environ.get("KIROCREW_HOME", "/home/kirocrew")
+    BASIC_USER = os.environ.get("LOGIN_SHIM_USER", "crew")
+    BASIC_PASS = os.environ.get("LOGIN_SHIM_PASSWORD", "")
+    ALLOW_OPEN = os.environ.get("LOGIN_SHIM_ALLOW_OPEN", "").lower() in ("1", "true", "yes")
+
+    TOKEN_RE = re.compile(r"[?&]token=([^\s&]+)")
+
+    def _read_secret() -> str:
+        # Mismo orden que read_local_secret de kirocrew: per-listener y luego el compartido.
+        for path in (f"{HOME}/run/gateway-{CREW_PORT}.secret",
+                     f"{HOME}/.kiro/crew/.local_secret"):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    val = fh.read().strip()
+                if val:
+                    return val
+            except OSError:
+                continue
+        return ""
+
+    def mint_token() -> str:
+        secret = _read_secret()
+        if not secret:
+            raise RuntimeError("no pude leer el secreto local (¿PVC montado?)")
+        url = f"http://127.0.0.1:{CREW_PORT}/api/token/local?ttl={TTL}"
+        req = urllib.request.Request(url, headers={"X-Local-Secret": secret})
+        with urllib.request.urlopen(req, timeout=6) as resp:  # noqa: S310 (loopback fijo)
+            tok = json.loads(resp.read()).get("token", "")
+        if not tok:
+            raise RuntimeError("el gateway devolvió un token vacío")
+        return tok
+
+    def _has_session(cookie_header: str) -> bool:
+        return re.search(r"(?:^|;\s*)" + re.escape(COOKIE_NAME) + r"=", cookie_header or "") is not None
+
+    def _auth_ok(auth_header: str) -> bool:
+        # Modo desactivado (por defecto): sin password y sin ALLOW_OPEN -> no mintea.
+        if not BASIC_PASS:
+            return ALLOW_OPEN
+        if not (auth_header or "").startswith("Basic "):
+            return False
+        try:
+            user, _, pw = base64.b64decode(auth_header[6:]).decode("utf-8").partition(":")
+        except Exception:
+            return False
+        # Comparación en tiempo constante para user y pass.
+        return hmac.compare_digest(user, BASIC_USER) and hmac.compare_digest(pw, BASIC_PASS)
+
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "crew-login-shim/1"
+
+        def _redirect(self, location: str) -> None:
+            self.send_response(302)
+            self.send_header("Location", location)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _text(self, code: int, body: str, extra=None) -> None:
+            data = body.encode("utf-8")
+            self.send_response(code)
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self) -> None:
+            if self.path.startswith("/healthz"):
+                self._text(200, "ok")
+                return
+            # ¿modo desactivado?
+            if not BASIC_PASS and not ALLOW_OPEN:
+                self._text(503, "login-shim desactivado: define LOGIN_SHIM_PASSWORD "
+                                "(recomendado) o LOGIN_SHIM_ALLOW_OPEN=true.")
+                return
+            # barrera basic-auth
+            if not _auth_ok(self.headers.get("Authorization", "")):
+                self._text(401, "Auth requerida.",
+                           {"WWW-Authenticate": 'Basic realm="crew-login"'})
+                return
+            # ya logueado -> a la interfaz
+            if _has_session(self.headers.get("Cookie", "")):
+                self._redirect(PUBLIC_URL + "/")
+                return
+            # mintear y entrar
+            try:
+                token = mint_token()
+            except Exception as exc:  # noqa: BLE001
+                self._text(502, f"login-shim: {exc}")
+                return
+            self._redirect(f"{PUBLIC_URL}/?token={token}")
+
+        def log_message(self, fmt, *args) -> None:
+            sys.stderr.write("login-shim %s - %s\n" % (self.address_string(), fmt % args))
+
+    if __name__ == "__main__":
+        mode = "basic-auth" if BASIC_PASS else ("ABIERTO" if ALLOW_OPEN else "desactivado")
+        sys.stderr.write(f"login-shim escuchando en :{PORT} (modo={mode}, destino={PUBLIC_URL})\n")
+        ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

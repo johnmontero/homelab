@@ -1,0 +1,22 @@
+# Expone el login-shim en su PROPIO hostname crew-login.home.lab (para no pisar
+# ninguna ruta del SPA de Crew, que sirve catch-all). Requiere DNS rewrite en AdGuard:
+#   crew-login.home.lab → 192.168.18.220
+#
+# Flujo: abres http://crew-login.home.lab → (basic-auth) → el shim mintea un token y
+# hace 302 a http://crew.home.lab/?token=... → Crew canjea la cookie y entra.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kirocrew-login-route
+  namespace: kirocrew
+spec:
+  parentRefs:
+    - name: homelab-gateway
+      namespace: default
+      sectionName: http
+  hostnames:
+    - crew-login.home.lab
+  rules:
+    - backendRefs:
+        - name: kirocrew-login
+          port: 8088
