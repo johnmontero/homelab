@@ -158,6 +158,21 @@ data:
         padding:12px; text-align:center; font-size:15px; letter-spacing:.05em; word-break:break-all; margin:8px 0;
       }
       .hint{color:var(--muted); font-size:12px; text-align:center; margin:8px 0 0}
+      .backdrop{
+        position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.62);
+        display:flex; align-items:center; justify-content:center; padding:24px;
+      }
+      .modal{
+        width:100%; max-width:360px; text-align:center;
+        background:linear-gradient(180deg,var(--card2),var(--card));
+        border:1px solid var(--border); border-radius:16px; padding:26px 24px; box-shadow:var(--shadow);
+      }
+      .modal .msub{font-weight:600; font-size:16px; margin:0 0 6px}
+      .dots{
+        width:20px; height:20px; margin:10px auto 0; border:2px solid var(--border);
+        border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite;
+      }
+      @keyframes spin{to{transform:rotate(360deg)}}
       .foot{margin-top:20px; text-align:center; color:var(--muted); font-size:11px}
       .foot a{color:var(--muted)}
     </style>
@@ -414,20 +429,33 @@ data:
         state = st.get("state", "idle")
         if st.get("active") or state in ("starting", "pending", "prompt"):
             code = html.escape(st.get("code") or "…")
-            url = html.escape(st.get("url") or "", quote=True)
+            url = st.get("url") or ""
+            url_js = json.dumps(url)
             msg = html.escape(st.get("message") or "Solicitando código…")
-            link = (f'<a class="submit" href="{url}" target="_blank" rel="noopener">Abrir verificación</a>'
-                    if url else "")
+            if url:
+                action = ('<button class="submit" type="button" onclick="openAuth()">Abrir verificación</button>'
+                          '<p class="hint">Al aprobar en AWS, esta ventana se cierra sola.</p>')
+            else:
+                action = '<div class="dots"></div>'
             return (
-                '<p class="sub">Confirma el acceso a tu cuenta</p>'
+                '<p class="sub">Autorizando cuenta…</p>'
+                '<div class="backdrop"><div class="modal">'
+                '<p class="msub">Autoriza el acceso</p>'
                 f'<p class="hint">{msg}</p>'
                 f'<div class="code">{code}</div>'
-                f'{link}'
-                '<p class="hint">Esperando confirmación…</p>'
+                f'{action}'
                 '<form method="post" action="/account/cancel"><button class="submit ghost" type="submit">Cancelar</button></form>'
-                '<script>var R="' + state + '";setInterval(function(){fetch("/account/status")'
-                '.then(function(r){return r.json();}).then(function(s){'
-                'if(s.state!==R){location.reload();}});},2500);</script>'
+                '</div></div>'
+                '<script>'
+                'var AUTH_URL=' + url_js + ';var pop=null;'
+                'function openAuth(){pop=window.open(AUTH_URL,"crew-sso","width=520,height=760");if(pop){pop.focus();}}'
+                'var R="' + state + '";'
+                'setInterval(function(){fetch("/account/status").then(function(r){return r.json();})'
+                '.then(function(s){'
+                'if(s.state==="success"){try{if(pop){pop.close();}}catch(e){}location.href="/account";}'
+                'else if(s.state!==R){location.reload();}'
+                '});},2500);'
+                '</script>'
             )
         if state == "success":
             ident = html.escape(st.get("identity") or "")
