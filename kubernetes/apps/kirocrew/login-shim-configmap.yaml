@@ -468,6 +468,13 @@ data:
             '<script>function ssoFields(on){document.getElementById("ssof").style.display=on?"":"none";}</script>'
         )
 
+    def landing_body() -> str:
+        return (
+            '<p class="sub">Ya tienes sesión en el shim</p>'
+            '<a class="submit" href="/enter">Entrar al panel</a>'
+            '<a class="ghostlink" href="/account">Gestionar cuenta de Kiro</a>'
+        )
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "crew-login-shim/3"
 
@@ -537,15 +544,18 @@ data:
                     return
                 self._send(200, render(account_body()))
                 return
-            # "/" — acceso al panel
-            if _has_session(self.headers.get("Cookie", "")):
-                self._redirect(PUBLIC_URL + "/")
+            if path == "/enter":
+                if self._authed() or (ALLOW_OPEN and not LOGIN_PASS):
+                    self._enter()
+                    return
+                self._redirect("/")
                 return
+            # "/" — landing (o formulario de login si no hay sesión del shim)
             if ALLOW_OPEN and not LOGIN_PASS:
                 self._enter()
                 return
             if self._authed():
-                self._enter()
+                self._send(200, render(landing_body()))
                 return
             self._send(200, render(login_body()))
 

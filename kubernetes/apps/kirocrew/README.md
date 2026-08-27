@@ -170,7 +170,9 @@ kubectl apply -f deployment.yaml     # agrega el sidecar (reinicia el pod)
 ```
 
 Uso: abre `http://crew-login.home.lab`, ingresa usuario/contraseña en la página y te
-deja dentro del dashboard ya autenticado. La cookie de refresh (~30 días) hace que,
+deja dentro del dashboard ya autenticado. Si ya tienes sesión del shim, la raíz muestra
+un **landing** con "Entrar al panel" y "Gestionar cuenta" (en vez de redirigir directo,
+así puedes llegar a `/account`). La cookie de refresh (~30 días) hace que,
 pasada la primera vez, ir directo a `http://crew.home.lab/` también funcione hasta que
 expire.
 
