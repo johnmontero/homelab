@@ -89,16 +89,38 @@ Pasos:
 Verificar el enrutado:
 ```bash
 kubectl -n kirocrew get httproute kirocrew-route -o wide
-# desde la LAN, contra la IP del gateway (debe dar 200/302, no 403):
+# desde la LAN, contra la IP del gateway. La raíz sirve el SPA (200) sin token,
+# pero /api/* está protegido (403 sin token) — ver "Autenticación":
 curl -H 'Host: crew.home.lab' http://192.168.18.220/
-# abre http://crew.home.lab
 ```
 
-> **Seguridad:** en este setup el dashboard **no exige token de red** por defecto.
-> Publicar `crew.home.lab` en la LAN da acceso a un agente que puede ejecutar
-> herramientas dentro del clúster (incluido el `rollout restart` de PIVAS vía su SA).
-> Limita el acceso a la LAN de confianza y considera poner auth delante (p. ej. en el
-> Gateway) si la LAN no es de fiar.
+### Autenticación (token)
+
+Crew **no tiene login usuario/contraseña**: el acceso es por **token**. La raíz (`/`)
+carga el SPA sin auth, pero toda la funcionalidad (`/api/*`, WebSocket) exige el token;
+sin él responde `403`.
+
+1. Genera un token con el CLI (dentro del pod). TTL por defecto 20h (`--ttl` para
+   cambiarlo, p. ej. `--ttl 12h`):
+   ```bash
+   kubectl -n kirocrew exec -it deploy/kirocrew -- kirocrew token
+   ```
+   Imprime una URL tipo `http://localhost:5476?token=eyJ...`.
+2. El token es independiente del host: cambia `localhost:5476` por `crew.home.lab` y
+   ábrelo una vez en el navegador:
+   ```
+   http://crew.home.lab?token=eyJ...
+   ```
+   Crew canjea el token por cookies de sesión (incluida una de refresh con ~30 días),
+   así que quedas logueado en ese navegador sin volver a pegar el token.
+3. Para rotar/renovar, vuelve a ejecutar `kirocrew token`.
+
+> **Seguridad:** el token/URL es un **secreto tipo bearer**: quien lo tenga entra
+> durante su TTL — no lo compartas ni lo pegues en canales/logs. Además, publicar
+> `crew.home.lab` en la LAN da acceso a un agente que puede ejecutar herramientas
+> dentro del clúster (incluido el `rollout restart` de PIVAS vía su SA). El acceso va
+> en **HTTP plano** por el Gateway (token y cookies viajan sin cifrar): limítalo a una
+> LAN de confianza y, si no lo es, pon TLS/auth delante en el Gateway.
 
 ## Caveat del sandbox (importante)
 
