@@ -448,7 +448,10 @@ data:
                 '</div></div>'
                 '<script>'
                 'var AUTH_URL=' + url_js + ';var pop=null;'
-                'function openAuth(){pop=window.open(AUTH_URL,"crew-sso","width=520,height=760");if(pop){pop.focus();}}'
+                'function openAuth(){var w=520,h=760,'
+                'l=Math.max(0,((screen.width||1200)-w)/2),tp=Math.max(0,((screen.height||800)-h)/2);'
+                'pop=window.open(AUTH_URL,"crew-sso","width="+w+",height="+h+",left="+l+",top="+tp);'
+                'if(pop){pop.focus();}}'
                 'var R="' + state + '";'
                 'setInterval(function(){fetch("/account/status").then(function(r){return r.json();})'
                 '.then(function(s){'
@@ -508,9 +511,17 @@ data:
         pub = html.escape(PUBLIC_URL, quote=True)
         return (
             '<p class="sub">Reiniciando Crew…</p>'
-            '<p class="hint">En unos segundos el panel vuelve con la cuenta activa.</p>'
+            '<p class="hint" id="cdmsg">Volviendo al panel en <b id="cd">20</b> s…</p>'
+            '<div class="dots" id="sp" style="display:none"></div>'
             f'<a class="submit" href="{pub}/">Ir al panel ahora</a>'
-            '<script>setTimeout(function(){location.href="' + PUBLIC_URL + '/";}, 12000);</script>'
+            '<script>'
+            'var PU=' + json.dumps(PUBLIC_URL + "/") + ';'
+            'var n=20,cd=document.getElementById("cd"),msg=document.getElementById("cdmsg"),sp=document.getElementById("sp");'
+            'function check(){fetch(PU,{mode:"no-cors",cache:"no-store"}).then(function(){location.href=PU;})'
+            '.catch(function(){setTimeout(check,2000);});}'
+            'var t=setInterval(function(){n--;if(cd){cd.textContent=n;}if(n<=0){clearInterval(t);'
+            'if(msg){msg.textContent="Verificando que el panel esté listo…";}if(sp){sp.style.display="block";}check();}},1000);'
+            '</script>'
         )
 
     class Handler(BaseHTTPRequestHandler):
