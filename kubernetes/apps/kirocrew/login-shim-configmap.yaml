@@ -476,6 +476,15 @@ data:
             '<a class="ghostlink" href="/account">Gestionar cuenta de Kiro</a>'
         )
 
+    def restarting_body() -> str:
+        pub = html.escape(PUBLIC_URL, quote=True)
+        return (
+            '<p class="sub">Reiniciando Crew…</p>'
+            '<p class="hint">En unos segundos el panel vuelve con la cuenta activa.</p>'
+            f'<a class="submit" href="{pub}/">Ir al panel ahora</a>'
+            '<script>setTimeout(function(){location.href="' + PUBLIC_URL + '/";}, 12000);</script>'
+        )
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "crew-login-shim/3"
 
@@ -610,8 +619,7 @@ data:
                     return
                 try:
                     restart_crew()
-                    self._send(200, render(notice_body(
-                        "Reiniciando Crew… en unos segundos el panel vuelve con la cuenta activa.")))
+                    self._send(200, render(restarting_body()))
                 except Exception as exc:  # noqa: BLE001
                     self._send(502, render(notice_body(
                         f"No pude reiniciar Crew: {exc}. Usa: "
