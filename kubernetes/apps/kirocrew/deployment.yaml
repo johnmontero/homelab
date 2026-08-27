@@ -76,9 +76,9 @@ spec:
         # Sidecar "login-shim": auto-login para crew.home.lab. Mintea un token por
         # loopback (comparte red y PVC con el contenedor principal) y redirige a la
         # interfaz. Expuesto aparte en crew-login.home.lab (ver login-shim-*.yaml).
-        # OJO SEGURIDAD: mintear = saltarse la barrera de token de Crew. Por eso pide
-        # su propia basic-auth (Secret kirocrew-login-auth). Sin password y sin
-        # LOGIN_SHIM_ALLOW_OPEN, el shim queda DESACTIVADO (responde 503).
+        # OJO SEGURIDAD: mintear = saltarse la barrera de token de Crew. Por eso muestra
+        # una página de login propia (formulario user/contraseña, Secret kirocrew-login-auth).
+        # Sin password y sin LOGIN_SHIM_ALLOW_OPEN, el shim queda DESACTIVADO (responde 503).
         # ------------------------------------------------------------------------
         - name: login-shim
           image: ghcr.io/kirodotdev/kirocrew:stable   # misma imagen: trae python3 y el usuario dueño del secreto
@@ -91,7 +91,7 @@ spec:
               value: "http://crew.home.lab"
             - name: LOGIN_SHIM_PORT
               value: "8088"
-            # basic-auth (recomendado). El password viene del Secret kirocrew-login-auth
+            # form-auth (recomendado). El password viene del Secret kirocrew-login-auth
             # (opcional): si no existe, el shim queda desactivado salvo LOGIN_SHIM_ALLOW_OPEN.
             - name: LOGIN_SHIM_USER
               value: "crew"

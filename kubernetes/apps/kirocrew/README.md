@@ -135,11 +135,13 @@ sin él responde `403`.
 ### Auto-login (opcional): sidecar `login-shim`
 
 Para no tener que correr `kirocrew token` a mano, un **sidecar** en el mismo pod
-automatiza el flujo: al abrir su URL, si el navegador **no** trae la cookie de sesión,
-mintea un token por loopback (`/api/token/local`, usando el secreto local del PVC) y
-hace `302` a `http://crew.home.lab/?token=…`; si ya tienes cookie, redirige directo a
-la interfaz. Se expone en su **propio hostname** `crew-login.home.lab` (para no pisar
-rutas del SPA).
+automatiza el flujo con una **página de login propia** (identidad de Kiro Crew: tema
+oscuro, acento violeta, fuente Space Grotesk, logo real de `/logo.png`). Al abrir su
+URL: si el navegador ya trae la cookie de sesión, redirige (`303`) directo a la
+interfaz; si no, muestra el formulario y, al validar las credenciales, mintea un token
+por loopback (`/api/token/local`, con el secreto local del PVC) y hace `303` a
+`http://crew.home.lab/?token=…`. Se expone en su **propio hostname**
+`crew-login.home.lab` (para no pisar rutas del SPA).
 
 Piezas: `login-shim-configmap.yaml` (script), sidecar en `deployment.yaml`,
 `login-shim-service.yaml` (:8088) y `login-shim-httproute.yaml` (`crew-login.home.lab`).
@@ -149,8 +151,8 @@ Piezas: `login-shim-configmap.yaml` (script), sidecar en `deployment.yaml`,
 > el Gateway. Por eso el shim tiene **tres modos**, según el Secret `kirocrew-login-auth`
 > y la env `LOGIN_SHIM_ALLOW_OPEN`:
 >
-> - **basic-auth** (recomendado): con el Secret puesto, el shim pide usuario/contraseña
->   (usuario `crew` por defecto) y recién ahí mintea. El navegador cachea la credencial.
+> - **form-auth** (recomendado): con el Secret puesto, la página pide usuario/contraseña
+>   (usuario `crew` por defecto) y solo entonces mintea.
 > - **abierto**: `LOGIN_SHIM_ALLOW_OPEN=true` **sin** password → mintea a cualquiera.
 >   Úsalo solo en una LAN de plena confianza.
 > - **desactivado** (por defecto): sin password y sin `ALLOW_OPEN`, el shim responde
@@ -167,9 +169,10 @@ kubectl apply -f deployment.yaml     # agrega el sidecar (reinicia el pod)
 # 3) DNS rewrite en AdGuard: crew-login.home.lab → 192.168.18.220
 ```
 
-Uso: abre `http://crew-login.home.lab` (te pide la basic-auth una vez) y te deja dentro
-del dashboard ya autenticado. La cookie de refresh (~30 días) hace que, pasada la
-primera vez, ir directo a `http://crew.home.lab/` también funcione hasta que expire.
+Uso: abre `http://crew-login.home.lab`, ingresa usuario/contraseña en la página y te
+deja dentro del dashboard ya autenticado. La cookie de refresh (~30 días) hace que,
+pasada la primera vez, ir directo a `http://crew.home.lab/` también funcione hasta que
+expire.
 
 ## Caveat del sandbox (importante)
 
