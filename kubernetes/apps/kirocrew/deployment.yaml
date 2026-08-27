@@ -61,12 +61,15 @@ spec:
           resources:
             requests:
               cpu: 250m
-              memory: 1Gi
+              memory: 2Gi
             limits:
               cpu: "2"
               # Crew = gateway + modelo de embeddings + sesión de agente (kiro-cli).
-              # 2Gi provocaba OOMKilled al iniciar una sesión; el nodo tiene 16Gi.
-              memory: 4Gi
+              # Crew mide la memoria DENTRO del cgroup (disponible = limit - uso). Con
+              # 4Gi e idle ~2Gi, quedaban ~2GB y saltaba el watchdog (critical 2GB) y
+              # nunca alcanzaba spawn_min_memory_gb=4 (subagentes bloqueados). El nodo
+              # tiene 16Gi (~9 libres), así que damos headroom real con 8Gi.
+              memory: 8Gi
           # Sin probes HTTP: por defecto el dashboard escucha en loopback, así que
           # kubelet no lo alcanza por podIP. El acceso se hace por `kubectl port-forward`
           # (usa la loopback del pod). Si habilitas bind de red + token (ver README),
