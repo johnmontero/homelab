@@ -27,6 +27,7 @@ data:
     import json
     import os
     import re
+    import select
     import subprocess
     import sys
     import threading
@@ -53,6 +54,7 @@ data:
     # Parser genérico del device flow: cualquier URL https y un código tipo XXXX-XXXX.
     URL_RE = re.compile(r"https?://[^\s'\"]+")
     CODE_RE = re.compile(r"\b[A-Z0-9]{4}-[A-Z0-9]{4}\b")
+    ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
     IDP_RE = re.compile(r"^https://[A-Za-z0-9.-]+(/[^\s]*)?$")
     REGION_RE = re.compile(r"^[a-z0-9-]{3,40}$")
 
@@ -276,48 +278,95 @@ data:
             cmd = [KIROCLI, "login", "--license", "free", "--use-device-flow"]
         with ACCT_LOCK:
             ACCT.update(state="pending", message="Solicitando código…")
-        buf = ""
+        # kiro-cli pro exige TTY: prompta Start URL/Región (pre-llenados desde los flags).
+        # Sin TTY la región queda vacía ("invalid host label"). Corremos bajo un PTY y
+        # respondemos cada prompt con Enter para aceptar los valores pre-llenados.
+        master, slave = os.openpty()
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True)
         except Exception as exc:  # noqa: BLE001
+            for fd in (master, slave):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
             with ACCT_LOCK:
                 ACCT.update(active=False, state="error", message=f"No pude ejecutar kiro-cli: {exc}")
                 CTRL["proc"] = None
             return
+        os.close(slave)
         with ACCT_LOCK:
             CTRL["proc"], CTRL["cancel"] = proc, False
+        buf = ""
+        answered = 0
         start = time.time()
-        try:
-            for line in proc.stdout:  # type: ignore[union-attr]
-                buf += line
-                mu = URL_RE.search(buf)
-                mc = CODE_RE.search(buf)
-                with ACCT_LOCK:
-                    if mu and not ACCT["url"]:
-                        ACCT["url"] = mu.group(0)
-                    if mc and not ACCT["code"]:
-                        ACCT["code"] = mc.group(0)
-                    if ACCT["url"]:
-                        ACCT.update(state="prompt", message="Abre el enlace y confirma el código.")
-                if time.time() - start > 600:
-                    proc.kill()
+        while True:
+            try:
+                ready, _, _ = select.select([master], [], [], 1.0)
+            except Exception:  # noqa: BLE001
+                break
+            if ready:
+                try:
+                    chunk = os.read(master, 4096)
+                except OSError:
                     break
-        except Exception:  # noqa: BLE001
+                if not chunk:
+                    break
+                buf += chunk.decode("utf-8", "replace")
+                if len(buf) > 65536:
+                    buf = buf[-65536:]
+                clean = ANSI_RE.sub("", buf)
+                prompts = clean.count("? Enter")
+                while answered < prompts and answered < 4:
+                    try:
+                        os.write(master, b"\n")
+                    except OSError:
+                        break
+                    answered += 1
+                mc = CODE_RE.search(clean)
+                code = mc.group(0) if mc else ""
+                verify = ""
+                for m in URL_RE.finditer(clean):
+                    u = m.group(0).rstrip(".,)")
+                    # solo la URL de verificación (no el eco de la Start URL del prompt)
+                    if ("user_code=" in u) or ("/device" in u) or ("device.sso" in u) or (code and code in u):
+                        verify = u
+                        break
+                with ACCT_LOCK:
+                    if code and not ACCT["code"]:
+                        ACCT["code"] = code
+                    if verify and not ACCT["url"]:
+                        ACCT["url"] = verify
+                    if ACCT["code"] or ACCT["url"]:
+                        ACCT.update(state="prompt", message="Abre el enlace y confirma el código.")
+            if proc.poll() is not None:
+                break
+            if time.time() - start > 600:
+                try:
+                    proc.terminate()
+                except Exception:  # noqa: BLE001
+                    pass
+                break
+        try:
+            os.close(master)
+        except OSError:
             pass
-        rc = proc.wait()
+        proc.wait()
         with ACCT_LOCK:
             cancelled = CTRL["cancel"]
             CTRL["proc"], CTRL["cancel"] = None, False
         ident = current_identity()
+        low = ident.lower()
+        logged = ("not logged in" not in low) and ("no disponible" not in low) and ident != "desconocida"
         with ACCT_LOCK:
             ACCT["identity"] = ident
             if cancelled:
                 ACCT.update(active=False, state="idle", url="", code="",
                             message="Cancelado. La sesión anterior se cerró; inicia sesión con una cuenta.")
-            elif rc == 0:
+            elif logged:
                 ACCT.update(active=False, state="success", message="Sesión iniciada. Reinicia Crew para aplicar.")
             else:
-                tail = " ".join(buf.strip().splitlines()[-3:]) if buf.strip() else ""
+                tail = " ".join(ANSI_RE.sub("", buf).strip().splitlines()[-3:]) if buf.strip() else ""
                 ACCT.update(active=False, state="error", message=("El login falló o expiró. " + tail).strip())
 
     def start_login(method: str, url: str, region: str) -> bool:

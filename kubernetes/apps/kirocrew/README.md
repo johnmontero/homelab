@@ -195,6 +195,12 @@ en el **PVC compartido** (por eso el sidecar monta `home` en **RW**). No usa `ku
 exec` ni RBAC nuevo. Cambiar de cuenta **cierra la sesión actual** (identidad única por
 instancia). El `start URL`/región se validan y se pasan como argv (sin shell).
 
+> El login **pro** de kiro-cli exige un **TTY** (prompta Start URL/Región, aunque se
+> pasen por flag; sin terminal la región queda vacía → *"invalid host label"*). Por eso
+> el sidecar lo ejecuta bajo un **PTY** y auto-confirma con Enter los valores
+> pre-llenados desde los flags. El SSO requiere que la *start URL* sea válida y
+> alcanzable; si no, kiro-cli responde *"service error"*.
+
 > El acceso a `/account` está protegido por el mismo login del shim (cookie de sesión
 > firmada). Igual que el auto-login, va en HTTP plano por la LAN: mantenlo en red de
 > confianza.
