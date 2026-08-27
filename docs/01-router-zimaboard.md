@@ -111,6 +111,35 @@ Fuera del pool dinámico para orden (ej. `.10`, `.11`):
 > real** deben ser la MISMA IP. Tras crear/editar reservas, **renueva DHCP** en el
 > equipo (`sudo ipconfig set en0 DHCP` en macOS) para que tome la IP nueva.
 
+#### Rewrites de servicios (paneles y apps)
+
+Además de los equipos, hay dos tipos de servicios con nombre en `home.lab`. **Ojo con
+la IP destino: no es la misma para ambos.**
+
+- **Paneles del host ZimaBoard** → apuntan al propio host `10.0.1.1` (IP LAN estática;
+  no uses la WAN `192.168.18.113`, que es DHCP del router de casa). El DNS no lleva
+  puerto, así que la URL lo incluye:
+  - `zima.home.lab` → `10.0.1.1` · panel ZimaOS en `http://zima.home.lab` (:80)
+
+- **Apps del clúster k3s** → apuntan al **Envoy Gateway** (MetalLB `192.168.18.220`),
+  que enruta por `Host` en el puerto 80. Sus manifiestos (`HTTPRoute`) viven junto a
+  cada app en `kubernetes/`:
+  - `grafana.home.lab` → `192.168.18.220`
+  - `ai.home.lab` → `192.168.18.220`
+  - `pivas.home.lab` → `192.168.18.220`
+  - `crew.home.lab` → `192.168.18.220` (Kiro Crew; ver `kubernetes/apps/kirocrew/`)
+  - `adguard.home.lab` → `192.168.18.220` (UI de AdGuard, sin puerto; ver más abajo)
+
+> **No mezclar:** `zima.home.lab` va al host `10.0.1.1` (servicio nativo en su puerto).
+> Si apuntas ese panel al Gateway `192.168.18.220`, Envoy responde `404` porque no tiene
+> ruta para ese `Host`. Y al revés: las apps de k3s van al Gateway, no al host.
+
+> **AdGuard sin puerto:** aunque AdGuard corre en el host (`10.0.1.1:3001`), se expone
+> por el Gateway para poder abrirlo en `http://adguard.home.lab` sin `:3001`. El truco es
+> un `Service` sin selector + `EndpointSlice` manual → `10.0.1.1:3001`
+> (`kubernetes/apps/adguard/`). Por eso su rewrite apunta al Gateway (`192.168.18.220`),
+> no al host. El acceso directo `http://10.0.1.1:3001` sigue funcionando igual.
+
 ## 5. Convención de nombres (macOS)
 
 En cada Mac, fija los tres nombres al mismo label (sin espacios ni puntos):
