@@ -106,7 +106,7 @@ data:
       }
       .card{
         position:relative;
-        width:100%; max-width:380px; background:linear-gradient(180deg,var(--card2),var(--card));
+        width:100%; max-width:460px; background:linear-gradient(180deg,var(--card2),var(--card));
         border:1px solid var(--border); border-radius:16px; padding:32px 28px;
         box-shadow:var(--shadow);
       }
@@ -149,6 +149,10 @@ data:
       }
       .submit.ghost:hover, a.ghostlink:hover{color:var(--text); border-color:var(--accent); filter:none}
       a.ghostlink{display:block; text-align:center; text-decoration:none; margin-top:10px; padding:9px; border-radius:10px; font-size:12px}
+      .row{display:flex; gap:10px}
+      .row>*{flex:1 1 0; min-width:0}
+      .row form{margin:0}
+      .row .submit, .row .ghostlink{margin-top:0}
       .err{
         background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.35); color:#ef4444;
         border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:4px;
@@ -515,7 +519,6 @@ data:
                 '</script>'
             )
         if state == "success":
-            pub = html.escape(PUBLIC_URL, quote=True)
             return (
                 '<p class="sub">Sesión iniciada</p>'
                 f'{ident_html(st.get("identity") or "")}'
@@ -523,8 +526,10 @@ data:
                 '<form method="post" action="/account/restart"><button class="submit" type="submit">Reiniciar Crew ahora</button></form>'
                 '<p class="hint">o manualmente:</p>'
                 '<div class="code">kubectl -n kirocrew rollout restart deploy/kirocrew</div>'
-                f'<a class="submit ghost" href="{pub}/">Ir al panel</a>'
-                '<a class="ghostlink" href="/account">Volver a Cuenta</a>'
+                '<div class="row">'
+                '<a class="submit ghost" href="/enter">Ir al panel</a>'
+                '<a class="submit ghost" href="/account">Volver a Cuenta</a>'
+                '</div>'
             )
         ident_raw = current_identity()
         emsg = error or (st.get("message", "") if state == "error" else "")
@@ -548,8 +553,10 @@ data:
             '<button class="submit" type="submit">Iniciar sesión con esta cuenta</button>'
             '</form>'
             '<p class="hint">Cambiar de cuenta cierra la sesión actual.</p>'
-            '<form method="post" action="/account/logout"><button class="submit ghost" type="submit">Cerrar sesión actual</button></form>'
-            '<a class="ghostlink" href="/">← Volver al acceso al panel</a>'
+            '<div class="row">'
+            '<form method="post" action="/account/logout"><button class="submit ghost" type="submit">Cerrar sesión</button></form>'
+            '<a class="submit ghost" href="/">← Volver al acceso</a>'
+            '</div>'
             '<script>function ssoFields(on){document.getElementById("ssof").style.display=on?"":"none";}</script>'
         )
 
