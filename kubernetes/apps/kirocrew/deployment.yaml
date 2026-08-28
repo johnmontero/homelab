@@ -62,9 +62,12 @@ spec:
                 git config --global credential.helper store
               fi
               CHK="$HOME/.kiro/crew/checkouts"; REPO="$CHK/protecso-kiro-workflow"
-              mkdir -p "$CHK" "$HOME/.kiro/steering"
+              # Destino EFECTIVO: el agente lee 'file://.kiro/steering/**/*.md' relativo a
+              # su workspace (default → ~/.kiro/crew/workspace).
+              DEST="$HOME/.kiro/crew/workspace/.kiro/steering"
+              mkdir -p "$CHK" "$DEST"
               if [ -d "$REPO/.git" ]; then git -C "$REPO" pull --ff-only; else git clone --depth 1 https://github.com/Protecso-SAC/protecso-kiro-workflow.git "$REPO"; fi
-              if [ -d "$REPO/.kiro/steering" ]; then cp "$REPO"/.kiro/steering/*.md "$HOME/.kiro/steering/" 2>/dev/null && echo "OK canon: $(ls -1 "$HOME/.kiro/steering" | wc -l) archivos"; else echo "WARN: sin checkout; se conserva el canon previo del PVC"; fi
+              if [ -d "$REPO/.kiro/steering" ]; then cp "$REPO"/.kiro/steering/*.md "$DEST"/ 2>/dev/null && echo "OK canon: $(ls -1 "$DEST" | wc -l) archivos en $DEST"; else echo "WARN: sin checkout; se conserva el canon previo del PVC"; fi
               exit 0
           env:
             - name: HOME
