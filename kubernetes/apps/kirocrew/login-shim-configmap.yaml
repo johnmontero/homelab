@@ -153,8 +153,14 @@ data:
         background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.35); color:#ef4444;
         border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:4px;
       }
-      .acct-row{font-size:13px; color:var(--muted); text-align:center; margin:0 0 16px; word-break:break-word}
+      .acct-row{font-size:12px; color:var(--muted); text-align:center; margin:0 0 6px}
       .acct-row b{color:var(--text)}
+      .acct{
+        font-size:12px; color:var(--text); background:var(--field); border:1px solid var(--border);
+        border-radius:10px; padding:10px 12px; margin:0 0 14px; text-align:left;
+        line-height:1.55; word-break:break-all;
+      }
+      .acct div{margin:0}
       .seg{display:flex; flex-direction:column; gap:8px; font-size:13px; margin-bottom:4px}
       .seg label{display:flex; align-items:center; gap:8px; color:var(--text); margin:0; cursor:pointer}
       .code{
@@ -296,13 +302,30 @@ data:
 
     # --- gestión de cuenta (kiro-cli, device flow) --------------------------------
     def current_identity() -> str:
+        # Devuelve las lineas del whoami (separadas por \n). Une una etiqueta suelta
+        # que termina en ":" con su valor de la linea siguiente (ej. "Profile:" + valor).
         try:
             out = subprocess.run([KIROCLI, "user", "whoami"], capture_output=True, text=True, timeout=12)
             txt = (out.stdout or out.stderr or "").strip()
-            joined = " · ".join(l.strip() for l in txt.splitlines() if l.strip())
-            return joined[:200] or "desconocida"
+            raw = [l.strip() for l in txt.splitlines() if l.strip()]
+            lines = []
+            i = 0
+            while i < len(raw):
+                if raw[i].endswith(":") and i + 1 < len(raw):
+                    lines.append(raw[i] + " " + raw[i + 1])
+                    i += 2
+                else:
+                    lines.append(raw[i])
+                    i += 1
+            return "\n".join(lines)[:500] or "desconocida"
         except Exception as exc:  # noqa: BLE001
             return f"no disponible ({exc})"
+
+    def ident_html(ident: str) -> str:
+        parts = [html.escape(p) for p in (ident or "").split("\n") if p.strip()]
+        if not parts:
+            parts = [html.escape(ident or "desconocida")]
+        return '<div class="acct">' + "".join("<div>" + p + "</div>" for p in parts) + "</div>"
 
     def run_login(method: str, url: str, region: str) -> None:
         # kiro-cli rechaza login si ya hay sesión: cerrar primero (cambiar = re-login).
@@ -481,11 +504,11 @@ data:
                 '</script>'
             )
         if state == "success":
-            ident = html.escape(st.get("identity") or "")
             pub = html.escape(PUBLIC_URL, quote=True)
             return (
                 '<p class="sub">Sesión iniciada</p>'
-                f'<div class="acct-row">Cuenta: <b>{ident}</b></div>'
+                '<div class="acct-row">Cuenta:</div>'
+                f'{ident_html(st.get("identity") or "")}'
                 '<p class="hint">Aplica el cambio reiniciando Crew:</p>'
                 '<form method="post" action="/account/restart"><button class="submit" type="submit">Reiniciar Crew ahora</button></form>'
                 '<p class="hint">o manualmente:</p>'
@@ -493,12 +516,13 @@ data:
                 f'<a class="submit ghost" href="{pub}/">Ir al panel</a>'
                 '<a class="ghostlink" href="/account">Volver a Cuenta</a>'
             )
-        ident = html.escape(current_identity())
+        ident_raw = current_identity()
         emsg = error or (st.get("message", "") if state == "error" else "")
         err = f'<div class="err">{html.escape(emsg)}</div>' if emsg else ""
         return (
             '<p class="sub">Gestiona la cuenta de Kiro</p>'
-            f'<div class="acct-row">Cuenta actual: <b>{ident}</b></div>'
+            '<div class="acct-row">Cuenta actual:</div>'
+            f'{ident_html(ident_raw)}'
             f'{err}'
             '<form method="post" action="/account/start">'
             '<label>Método</label>'
