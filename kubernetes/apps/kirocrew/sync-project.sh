@@ -5,20 +5,21 @@
 # (base que navega el picker del dashboard).
 #
 # Uso:
-#   sh /home/kirocrew/.kiro/crew/sync-project.sh <slug> <repo-fs> <repo-docs>
+#   sh /home/kirocrew/.kiro/crew/sync-project.sh <owner> <slug> <repo-fs> <repo-docs>
+# El workspace queda en /home/kirocrew/workplace/projects/<owner>/<slug> (agrupado por owner).
 # Ejemplos:
-#   sh .../sync-project.sh pivas  protecso-pivas-fs  protecso-pivas-doc
-#   sh .../sync-project.sh cotejo protecso-cotejo-fs protecso-cotejo-docs
-#   sh .../sync-project.sh pulse  protecso-pulse-fs  protecso-pulse-docs
+#   sh .../sync-project.sh protecso pivas  protecso-pivas-fs  protecso-pivas-doc
+#   sh .../sync-project.sh protecso cotejo protecso-cotejo-fs protecso-cotejo-docs
+#   sh .../sync-project.sh protecso pulse  protecso-pulse-fs  protecso-pulse-docs
 set +e
 umask 077
-SLUG="$1"; FS_REPO="$2"; DOC_REPO="$3"
-if [ -z "$SLUG" ] || [ -z "$FS_REPO" ] || [ -z "$DOC_REPO" ]; then
-  echo "uso: sync-project.sh <slug> <repo-fs> <repo-docs>"; exit 2
+OWNER="$1"; SLUG="$2"; FS_REPO="$3"; DOC_REPO="$4"
+if [ -z "$OWNER" ] || [ -z "$SLUG" ] || [ -z "$FS_REPO" ] || [ -z "$DOC_REPO" ]; then
+  echo "uso: sync-project.sh <owner> <slug> <repo-fs> <repo-docs>"; exit 2
 fi
 HOME="${HOME:-/home/kirocrew}"
 ORG="https://github.com/Protecso-SAC"
-BASE="$HOME/workplace/$SLUG"
+BASE="$HOME/workplace/projects/$OWNER/$SLUG"
 CANON="$HOME/.kiro/crew/checkouts/protecso-kiro-workflow"
 
 mkdir -p "$BASE/.kiro/steering"
