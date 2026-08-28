@@ -128,7 +128,12 @@ la IP destino: no es la misma para ambos.**
   - `ai.home.lab` → `192.168.18.220`
   - `pivas.home.lab` → `192.168.18.220`
   - `crew.home.lab` → `192.168.18.220` (Kiro Crew; ver `kubernetes/apps/kirocrew/`)
+  - `login.crew.home.lab` → `192.168.18.220` (auto-login/gestión de cuenta de Kiro Crew)
   - `adguard.home.lab` → `192.168.18.220` (UI de AdGuard, sin puerto; ver más abajo)
+
+> **Tip (wildcard):** para la familia `crew` puedes usar un solo rewrite comodín
+> `*.crew.home.lab → 192.168.18.220` (cubre `login.crew.home.lab` y futuros subservicios).
+> El apex `crew.home.lab` necesita su propia entrada (el comodín no cubre el apex).
 
 > **No mezclar:** `zima.home.lab` va al host `10.0.1.1` (servicio nativo en su puerto).
 > Si apuntas ese panel al Gateway `192.168.18.220`, Envoy responde `404` porque no tiene

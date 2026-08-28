@@ -81,7 +81,7 @@ spec:
         # y redirige a la interfaz. En /account permite cambiar la cuenta de kiro-cli
         # (Builder ID / SSO Identity Center) por device flow: por eso monta el PVC en
         # RW (escribe la sesion de kiro-cli en el store compartido). Expuesto aparte en
-        # crew-login.home.lab (ver login-shim-*.yaml).
+        # login.crew.home.lab (ver login-shim-*.yaml).
         # OJO SEGURIDAD: mintear/cambiar cuenta = saltarse la barrera de token de Crew.
         # Por eso muestra una pagina de login propia (formulario user/contraseña, Secret
         # kirocrew-login-auth). Sin password y sin LOGIN_SHIM_ALLOW_OPEN, queda DESACTIVADO.

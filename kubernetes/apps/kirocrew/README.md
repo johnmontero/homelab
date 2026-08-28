@@ -21,7 +21,7 @@ skills, lecciones, jobs) en el homelab usando la imagen oficial multi-arch
 | `rbac.yaml` | SA `kirocrew-deployer` + Role/RoleBinding para CI→rollout de PIVAS (ns `pivas`) |
 | `login-shim-configmap.yaml` | Script del sidecar de auto-login (mintea token y redirige) |
 | `login-shim-service.yaml` | Service `kirocrew-login` :8088 (mismo pod, puerto del sidecar) |
-| `login-shim-httproute.yaml` | HTTPRoute `crew-login.home.lab` → shim :8088 |
+| `login-shim-httproute.yaml` | HTTPRoute `login.crew.home.lab` → shim :8088 |
 | `login-shim-secret.example.yaml` | Plantilla del Secret `kirocrew-login-auth` (basic-auth del shim) |
 
 ## Orden de aplicación
@@ -140,11 +140,11 @@ oscuro, acento violeta, fuente Space Grotesk, logo real de `/logo.png`). Al abri
 URL: si el navegador ya trae la cookie de sesión, redirige (`303`) directo a la
 interfaz; si no, muestra el formulario y, al validar las credenciales, mintea un token
 por loopback (`/api/token/local`, con el secreto local del PVC) y hace `303` a
-`http://crew.home.lab/?token=…`. Se expone en su **propio hostname**
-`crew-login.home.lab` (para no pisar rutas del SPA).
+`http://crew.home.lab/?token=…`. Se expone en su **propio subdominio**
+`login.crew.home.lab` (para no pisar rutas del SPA).
 
 Piezas: `login-shim-configmap.yaml` (script), sidecar en `deployment.yaml`,
-`login-shim-service.yaml` (:8088) y `login-shim-httproute.yaml` (`crew-login.home.lab`).
+`login-shim-service.yaml` (:8088) y `login-shim-httproute.yaml` (`login.crew.home.lab`).
 
 > **⚠️ Seguridad — importante:** mintear un token **equivale a saltarse la barrera de
 > auth de Crew**. Un `/login` abierto dejaría entrar a cualquiera en la LAN que alcance
@@ -166,10 +166,11 @@ kubectl -n kirocrew create secret generic kirocrew-login-auth --from-literal=pas
 # 2) recursos del shim
 kubectl apply -f login-shim-configmap.yaml -f login-shim-service.yaml -f login-shim-httproute.yaml
 kubectl apply -f deployment.yaml     # agrega el sidecar (reinicia el pod)
-# 3) DNS rewrite en AdGuard: crew-login.home.lab → 192.168.18.220
+# 3) DNS en AdGuard (wildcard que cubre la familia): *.crew.home.lab → 192.168.18.220
+#    (+ apex crew.home.lab → 192.168.18.220 para el dashboard)
 ```
 
-Uso: abre `http://crew-login.home.lab`, ingresa usuario/contraseña en la página y te
+Uso: abre `http://login.crew.home.lab`, ingresa usuario/contraseña en la página y te
 deja dentro del dashboard ya autenticado. Si ya tienes sesión del shim, la raíz muestra
 un **landing** con "Entrar al panel" y "Gestionar cuenta" (en vez de redirigir directo,
 así puedes llegar a `/account`). La cookie de refresh (~30 días) hace que,
