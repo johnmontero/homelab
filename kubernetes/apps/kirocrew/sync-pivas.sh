@@ -4,11 +4,15 @@
 # Crew trabaja en este dir (workspace "pivas") para autoría + git de PIVAS.
 # NO compila ni deploya (el pod no tiene docker/kubectl): eso queda en la máquina de dev.
 #
-# Uso (manual):  kubectl -n kirocrew exec deploy/kirocrew -- sh /home/kirocrew/.kiro/crew/projects/sync-pivas.sh
+# Uso (manual):  kubectl -n kirocrew exec deploy/kirocrew -- sh /home/kirocrew/.kiro/crew/sync-pivas.sh
+#
+# Ubicación: el picker de workspaces del dashboard navega /home/kirocrew/workplace/,
+# así que el workspace de PIVAS vive ahí (aparece junto a kirocrew-workspace). El script
+# se guarda fuera de workplace/ para no aparecer como entrada en el picker.
 set +e
 umask 077
 HOME="${HOME:-/home/kirocrew}"
-BASE="$HOME/.kiro/crew/projects/pivas"
+BASE="$HOME/workplace/pivas"
 CANON="$HOME/.kiro/crew/checkouts/protecso-kiro-workflow"
 FS_URL="https://github.com/Protecso-SAC/protecso-pivas-fs.git"
 DOC_URL="https://github.com/Protecso-SAC/protecso-pivas-doc.git"
