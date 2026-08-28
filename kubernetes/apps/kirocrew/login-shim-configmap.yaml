@@ -106,7 +106,7 @@ data:
       }
       .card{
         position:relative;
-        width:100%; max-width:460px; background:linear-gradient(180deg,var(--card2),var(--card));
+        width:100%; max-width:520px; background:linear-gradient(180deg,var(--card2),var(--card));
         border:1px solid var(--border); border-radius:16px; padding:32px 28px;
         box-shadow:var(--shadow);
       }
@@ -326,7 +326,18 @@ data:
                 else:
                     lines.append(raw[i])
                     i += 1
-            return "\n".join(lines)[:500] or "desconocida"
+            # Separa una URL entre parentesis a su propia linea:
+            # "... Identity Center (https://x/start)" -> "... Identity Center" + "https://x/start"
+            split = []
+            for l in lines:
+                m = re.match(r"^(.*?)\s*\((https?://[^)]+)\)\s*$", l)
+                if m:
+                    if m.group(1):
+                        split.append(m.group(1))
+                    split.append(m.group(2))
+                else:
+                    split.append(l)
+            return "\n".join(split)[:500] or "desconocida"
         except Exception as exc:  # noqa: BLE001
             return f"no disponible ({exc})"
 
@@ -338,7 +349,8 @@ data:
                  + ("Cuenta conectada" if connected else "Sin sesión") + '</div>')
         rows = []
         for p in lines:
-            cls = ' class="arn"' if p.lower().startswith("arn:") else ""
+            lp = p.lower()
+            cls = ' class="arn"' if (lp.startswith("arn:") or lp.startswith("http")) else ""
             rows.append("<div" + cls + ">" + html.escape(p) + "</div>")
         return badge + '<div class="acct">' + "".join(rows) + "</div>"
 
