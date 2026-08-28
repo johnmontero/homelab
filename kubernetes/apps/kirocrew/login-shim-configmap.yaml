@@ -52,6 +52,7 @@ data:
     # (p. ej. durante el reinicio). Un hilo lo baja por loopback y lo cachea; hasta
     # entonces cae al URL externo.
     LOGO = {"uri": LOGO_URL}
+    LOGO_CACHE = os.path.join(HOME, ".login-shim-logo")  # cache del data URI en el PVC
     KIROCLI = os.environ.get("KIROCLI_BIN", "kiro-cli")
     CREW_DEPLOYMENT = os.environ.get("CREW_DEPLOYMENT", "kirocrew")
     SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -166,7 +167,9 @@ data:
       }
       .acct div{margin:0}
       .acct .arn{color:var(--muted); font-size:11px; margin-top:3px}
-      .stat{display:flex; align-items:center; justify-content:center; gap:7px; font-size:12px; color:var(--muted); margin:0 0 8px}
+      .stat{position:absolute; top:14px; right:14px; z-index:5; display:flex; align-items:center; gap:6px;
+        font-size:11px; color:var(--muted); padding:4px 10px; border:1px solid var(--border);
+        border-radius:999px; background:var(--field)}
       .dot{width:8px; height:8px; border-radius:50%; flex:0 0 auto}
       .dot.on{background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.18)}
       .dot.off{background:var(--muted)}
@@ -247,15 +250,22 @@ data:
         return SHELL.replace("__LOGO__", html.escape(LOGO["uri"], quote=True)).replace("__BODY__", body).encode("utf-8")
 
     def _load_logo() -> None:
-        # Baja el logo por loopback y lo cachea como data URI (independiente de que
-        # crew.home.lab este arriba). Reintenta hasta que Crew responda.
-        for _ in range(60):
+        # Baja el logo por loopback, lo cachea como data URI en memoria y lo PERSISTE
+        # en el PVC (LOGO_CACHE), para que futuros arranques lo tengan al instante aun
+        # con Crew caido. Reintenta hasta que Crew responda.
+        for _ in range(120):
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{CREW_PORT}{LOGO_PATH}", timeout=5) as r:  # noqa: S310
                     if getattr(r, "status", 200) == 200:
                         data = r.read()
                         if data:
-                            LOGO["uri"] = "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+                            uri = "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+                            LOGO["uri"] = uri
+                            try:
+                                with open(LOGO_CACHE, "w", encoding="utf-8") as fh:
+                                    fh.write(uri)
+                            except OSError:
+                                pass
                             return
             except Exception:  # noqa: BLE001
                 pass
@@ -340,6 +350,26 @@ data:
             return "\n".join(split)[:500] or "desconocida"
         except Exception as exc:  # noqa: BLE001
             return f"no disponible ({exc})"
+
+    def parse_sso(ident: str):
+        # Extrae (start_url, region) de la identidad SOLO si es IAM Identity Center.
+        # region viene del ARN (arn:aws:codewhisperer:REGION:...) o del nombre del profile.
+        if "identity center" not in (ident or "").lower():
+            return "", ""
+        url, region = "", ""
+        for l in (ident or "").split("\n"):
+            s = l.strip()
+            if s.lower().startswith("http") and not url:
+                url = s
+            elif s.lower().startswith("arn:") and not region:
+                parts = s.split(":")
+                if len(parts) > 3 and parts[3]:
+                    region = parts[3]
+        if not region:
+            m = re.search(r"[Pp]rofile-([a-z]{2}-[a-z]+-\d+)", ident or "")
+            if m:
+                region = m.group(1)
+        return url, region
 
     def ident_html(ident: str) -> str:
         lines = [p for p in (ident or "").split("\n") if p.strip()] or [ident or "desconocida"]
@@ -544,6 +574,9 @@ data:
                 '</div>'
             )
         ident_raw = current_identity()
+        sso_url, sso_region = parse_sso(ident_raw)
+        u_val = html.escape(sso_url, quote=True)
+        r_val = html.escape(sso_region, quote=True)
         emsg = error or (st.get("message", "") if state == "error" else "")
         err = f'<div class="err">{html.escape(emsg)}</div>' if emsg else ""
         return (
@@ -558,9 +591,9 @@ data:
             '</div>'
             '<div id="ssof">'
             '<label for="url">Start URL</label>'
-            '<input id="url" name="url" placeholder="https://mi-org.awsapps.com/start" autocapitalize="off" spellcheck="false">'
+            f'<input id="url" name="url" value="{u_val}" placeholder="https://mi-org.awsapps.com/start" autocapitalize="off" spellcheck="false">'
             '<label for="rg">Región</label>'
-            '<input id="rg" name="region" placeholder="us-east-1" autocapitalize="off" spellcheck="false">'
+            f'<input id="rg" name="region" value="{r_val}" placeholder="us-east-1" autocapitalize="off" spellcheck="false">'
             '</div>'
             '<button class="submit" type="submit">Iniciar sesión con esta cuenta</button>'
             '</form>'
@@ -770,5 +803,14 @@ data:
     if __name__ == "__main__":
         mode = "form-auth" if LOGIN_PASS else ("ABIERTO" if ALLOW_OPEN else "desactivado")
         sys.stderr.write(f"login-shim escuchando en :{PORT} (modo={mode}, destino={PUBLIC_URL})\n")
+        # Carga sincrona del logo cacheado en el PVC (instantaneo, sin depender de Crew),
+        # luego un hilo lo refresca/crea desde loopback.
+        try:
+            with open(LOGO_CACHE, encoding="utf-8") as _fh:
+                _cached = _fh.read().strip()
+            if _cached:
+                LOGO["uri"] = _cached
+        except OSError:
+            pass
         threading.Thread(target=_load_logo, daemon=True).start()
         ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
