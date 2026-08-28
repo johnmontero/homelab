@@ -224,6 +224,46 @@ Si tras el arranque los agentes siguen deshabilitados:
   menos aislamiento. Es un trade-off de seguridad: le das a un agente acceso real a
   herramientas dentro del cluster.
 
+### Ceilings de recursos por-scope (warning de `systemd-run`, esperado)
+
+En los logs aparece, al arrancar, este aviso:
+
+```
+SECURITY: cgroup v2 scope enforcement unavailable (systemd-run not found);
+agent subprocess fork-bomb / memory-DoS ceilings are NOT enforced on this host.
+RLIMIT_NOFILE still applies.
+```
+
+Es **esperado en un pod** y no requiere acción en el contenedor. Crew intenta poner
+techos *por-scope* (uno por árbol de agente) creando scopes transitorios con
+`systemd-run --user --scope`, lo cual exige `systemd-run` **y** una sesión de usuario
+systemd (bus por `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS`). La imagen no trae
+systemd (ni debería), así que ese enforcement fino queda deshabilitado.
+
+La doc oficial de Crew (`docs/architecture/resource-protection.md`) indica que, en hosts
+sin esa vía, hay que **acotar el gateway con un límite de cgroup/contenedor externo** —
+que es justo lo que aporta Kubernetes. En este pod ya está satisfecho a nivel de
+contenedor:
+
+- **memory-DoS** → el `limits.memory: 8Gi` del pod fija `memory.max=8Gi` en el cgroup;
+  el kernel hace OOM-kill dentro del pod antes de tocar al host.
+- **fork-bomb** → el cgroup del pod trae `pids.max` (≈18883, el default del kubelet de
+  k3s); una bomba de forks se topa con ese techo sin agotar el nodo.
+- `RLIMIT_NOFILE=1024` por proceso sigue aplicando (lo dice el propio warning).
+
+Comprobar los techos vigentes:
+
+```bash
+kubectl -n kirocrew exec deploy/kirocrew -c kirocrew -- \
+  sh -c 'echo mem:; cat /sys/fs/cgroup/memory.max; echo pids:; cat /sys/fs/cgroup/pids.max'
+```
+
+Diferencia con un host bare-metal: allí los techos son **por árbol de agente** (cada
+subagente/MCP acotado por separado, 65% RAM por scope + slice agregado). Aquí son
+**por-pod** (más gruesos), pero suficientes para proteger el host, que es el objetivo del
+aviso. Para endurecer el fork-bomb se puede bajar el PID límite por-pod a nivel de nodo
+(`--kubelet-arg=pod-max-pids=N` en k3s); es un cambio de nodo, no del manifiesto.
+
 ## CI → rollout de PIVAS (RBAC en `rbac.yaml`)
 
 Para que Crew dispare `kubectl rollout restart deploy/pivas` cuando el CI pase a
@@ -286,5 +326,6 @@ kubectl -n kirocrew exec -it deploy/kirocrew -- \
   lecciones y el login. Respáldalo si te importa.
 - **Arquitectura**: fijado a amd64 (ZimaBoard) por `local-path` (node-local). La
   imagen es multi-arch por si luego cambias de nodo/almacenamiento.
-- **Recursos**: requests 250m/512Mi, limits 2 CPU/2Gi (embeddings + sesiones pueden
-  pesar; ajusta según el nodo).
+- **Recursos**: requests 250m/2Gi, limits 2 CPU/8Gi (embeddings + sesiones pueden
+  pesar; los 8Gi dan headroom real para el watchdog y `spawn_min_memory_gb=4`, y a la
+  vez acotan el memory-DoS a nivel de contenedor; ajusta según el nodo).
