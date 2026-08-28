@@ -534,12 +534,12 @@ data:
             '<div class="dots" id="sp" style="display:none"></div>'
             '<a class="submit" href="/enter">Ir al panel ahora</a>'
             '<script>'
-            'var PU=' + json.dumps(PUBLIC_URL + "/") + ';'
             'var n=20,cd=document.getElementById("cd"),msg=document.getElementById("cdmsg"),sp=document.getElementById("sp");'
-            'function check(){fetch(PU,{mode:"no-cors",cache:"no-store"}).then(function(){location.href="/enter";})'
-            '.catch(function(){setTimeout(check,2000);});}'
-            'var t=setInterval(function(){n--;if(cd){cd.textContent=n;}if(n<=0){clearInterval(t);'
-            'if(msg){msg.textContent="Verificando que el panel esté listo…";}if(sp){sp.style.display="block";}check();}},1000);'
+            'function check(){fetch("/account/crew-ready",{cache:"no-store"}).then(function(r){return r.json();})'
+            '.then(function(s){if(s&&s.ready){location.href="/enter";}else{setTimeout(check,2500);}})'
+            '.catch(function(){setTimeout(check,2500);});}'
+            'var t=setInterval(function(){n--;if(cd){cd.textContent=(n>0?n:0);}if(n<=0){clearInterval(t);'
+            'if(msg){msg.textContent="Esperando a que el panel esté listo…";}if(sp){sp.style.display="block";}check();}},1000);'
             '</script>'
         )
 
@@ -592,6 +592,19 @@ data:
                 return
             if path.startswith("/favicon"):
                 self._send(204, b"")
+                return
+            if path == "/account/crew-ready":
+                # Readiness real de Crew: /api/ready da 503 mientras arranca y 200 al
+                # estar listo. Lo consultamos por loopback (el navegador no puede leer
+                # el status cross-origin). Sin auth: solo revela si esta listo.
+                ready = False
+                try:
+                    with urllib.request.urlopen(  # noqa: S310 (loopback fijo)
+                            f"http://127.0.0.1:{CREW_PORT}/api/ready", timeout=4) as r:
+                        ready = getattr(r, "status", 200) == 200
+                except Exception:  # noqa: BLE001 (503/arranque/caido -> no listo)
+                    ready = False
+                self._send(200, json.dumps({"ready": ready}).encode("utf-8"), "application/json")
                 return
             if not LOGIN_PASS and not ALLOW_OPEN:
                 self._send(503, render(notice_body(
