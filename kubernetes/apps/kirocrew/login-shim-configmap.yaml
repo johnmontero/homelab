@@ -190,6 +190,7 @@ data:
         background:linear-gradient(180deg,var(--card2),var(--card));
         border:1px solid var(--border); border-radius:16px; padding:26px 24px; box-shadow:var(--shadow);
       }
+      .modal .logo{width:48px; height:48px; border-radius:12px; object-fit:cover; margin:0 auto 12px; display:block}
       .modal .msub{font-weight:600; font-size:16px; margin:0 0 6px}
       .dots{
         width:20px; height:20px; margin:10px auto 0; border:2px solid var(--border);
@@ -540,6 +541,7 @@ data:
             return (
                 '<p class="sub">Autorizando cuenta…</p>'
                 '<div class="backdrop"><div class="modal">'
+                f'<img class="logo" src="{html.escape(LOGO["uri"], quote=True)}" alt="Kiro Crew" onerror="this.style.display=\'none\'">'
                 '<p class="msub">Autoriza el acceso</p>'
                 f'<p class="hint">{msg}</p>'
                 f'<div class="code">{code}</div>'
@@ -548,7 +550,7 @@ data:
                 '</div></div>'
                 '<script>'
                 'var AUTH_URL=' + url_js + ';var pop=null;'
-                'function openAuth(){var w=520,h=760,'
+                'function openAuth(){var w=760,h=820,'
                 'l=Math.max(0,((screen.width||1200)-w)/2),tp=Math.max(0,((screen.height||800)-h)/2);'
                 'pop=window.open(AUTH_URL,"crew-sso","width="+w+",height="+h+",left="+l+",top="+tp);'
                 'if(pop){pop.focus();}}'
