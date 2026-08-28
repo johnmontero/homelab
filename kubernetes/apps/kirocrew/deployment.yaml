@@ -39,15 +39,19 @@ spec:
         seccompProfile:
           type: Unconfined
       # ------------------------------------------------------------------------
-      # initContainer: sincroniza el CANON de steering (repo protecso-kiro-workflow)
-      # al PVC antes de arrancar Crew, así el agente siempre lee las reglas al día.
-      # Best-effort: si no hay red o falta el Secret, conserva el canon previo del
-      # PVC y NO bloquea el arranque (exit 0). Credencial read-only via Secret
-      # kirocrew-git-creds (ver git-creds-secret.example.yaml). Refresco manual:
-      #   kubectl -n kirocrew exec deploy/kirocrew -- sh /home/kirocrew/.kiro/crew/checkouts/sync-canon.sh
+      # initContainer: clona el repo canónico (protecso-kiro-workflow) y ejecuta su
+      # crew/bootstrap.sh, que deja Crew reproducible en cada arranque: copia el canon
+      # de steering al workspace por defecto y monta los workspaces de proyecto
+      # (projects/<owner>/<slug>) según crew/projects.list. Al recrear el PVC se
+      # reconstruye todo desde git.
+      # Best-effort: si no hay red o falta el Secret, conserva lo del PVC y NO bloquea
+      # el arranque (exit 0). Credencial read-only via Secret kirocrew-git-creds
+      # (ver git-creds-secret.example.yaml). Refresco manual:
+      #   kubectl -n kirocrew exec deploy/kirocrew -- \
+      #     sh /home/kirocrew/.kiro/crew/checkouts/protecso-kiro-workflow/crew/bootstrap.sh
       # ------------------------------------------------------------------------
       initContainers:
-        - name: sync-canon
+        - name: bootstrap
           image: ghcr.io/kirodotdev/kirocrew:stable   # misma imagen: trae git y el usuario dueño del PVC
           imagePullPolicy: Always
           command: ["sh", "-c"]
@@ -62,12 +66,9 @@ spec:
                 git config --global credential.helper store
               fi
               CHK="$HOME/.kiro/crew/checkouts"; REPO="$CHK/protecso-kiro-workflow"
-              # Destino EFECTIVO: el agente lee 'file://.kiro/steering/**/*.md' relativo a
-              # su workspace (default → ~/.kiro/crew/workspace).
-              DEST="$HOME/.kiro/crew/workspace/.kiro/steering"
-              mkdir -p "$CHK" "$DEST"
+              mkdir -p "$CHK"
               if [ -d "$REPO/.git" ]; then git -C "$REPO" pull --ff-only; else git clone --depth 1 https://github.com/Protecso-SAC/protecso-kiro-workflow.git "$REPO"; fi
-              if [ -d "$REPO/.kiro/steering" ]; then cp "$REPO"/.kiro/steering/*.md "$DEST"/ 2>/dev/null && echo "OK canon: $(ls -1 "$DEST" | wc -l) archivos en $DEST"; else echo "WARN: sin checkout; se conserva el canon previo del PVC"; fi
+              if [ -f "$REPO/crew/bootstrap.sh" ]; then sh "$REPO/crew/bootstrap.sh"; else echo "WARN: crew/bootstrap.sh no encontrado; se conserva lo del PVC"; fi
               exit 0
           env:
             - name: HOME
