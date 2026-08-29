@@ -1,5 +1,6 @@
-# RBAC mínimo para que Kiro Crew pueda reiniciar el deploy de PIVAS tras CI verde.
-# Alcance: SOLO el namespace `pivas`. Sin permisos de cluster ni sobre otros ns.
+# RBAC mínimo para que Kiro Crew pueda reiniciar deploys del homelab tras CI verde.
+# Alcance: namespaces `pivas` y `pulse` (una Role+RoleBinding por ns). Sin permisos
+# de cluster. Cotejo NO aplica (despliega en AWS, no en el homelab).
 #
 # `kubectl rollout restart` = patch de una anotación en spec.template del Deployment.
 # `kubectl rollout status`  = lee deployments + replicasets + pods.
@@ -46,6 +47,41 @@ roleRef:
   name: pivas-rollout
 subjects:
   # El SA vive en el ns kirocrew; un RoleBinding puede referenciar SAs de otro ns.
+  - kind: ServiceAccount
+    name: kirocrew-deployer
+    namespace: kirocrew
+---
+# Mismo permiso para el ns `pulse` (rollout de Pulse tras CI verde).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pulse-rollout
+  namespace: pulse
+  labels:
+    app: kirocrew
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kirocrew-pulse-rollout
+  namespace: pulse
+  labels:
+    app: kirocrew
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pulse-rollout
+subjects:
   - kind: ServiceAccount
     name: kirocrew-deployer
     namespace: kirocrew

@@ -16,8 +16,9 @@ El pod de **Crew solo tiene `git`, `python3`, `curl` y acceso a la API de Kubern
 con su ServiceAccount (`kirocrew-deployer`, que solo puede `patch` de deployments en el
 ns **`pivas`**). **NO tiene `kubectl` ni `docker`.**
 
-- **[crew]** Lo único que Crew ejecuta del pipeline es el **rollout de PIVAS** vía la skill
-  `rollout-pivas` (`python3 rollout.py`, que llama a la API con el SA). Nada más.
+- **[crew]** Lo único que Crew ejecuta del pipeline es el **rollout** vía la skill
+  `rollout-homelab` (`ROLLOUT_NS=<ns> ROLLOUT_DEPLOY=<deploy> python3 rollout.py`, que
+  llama a la API con el SA). Nada más.
 - **[dev]** Todo lo demás corre en la **máquina de desarrollo** (donde están los repos y
   hay `docker`, `kubectl`, `git push` y el `github.token`): editar, compilar, tests,
   commit, push, verificar CI, `rollout status`, `reset_claim`, Pulse, etc.
@@ -66,13 +67,13 @@ Para Pulse: mismo comando contra `Protecso-SAC/protecso-pulse-fs`. Esperar
 `completed`/`success` para el commit desplegado **antes** del rollout.
 
 ## Rollout (tras CI verde)
-- **[crew]** PIVAS: ejecutar la skill `rollout-pivas` (`python3 rollout.py`) — parcha
-  `restartedAt` vía la API de k8s con el SA. Salida esperada: `HTTP 200`.
+- **[crew]** Ejecutar la skill `rollout-homelab` (parcha `restartedAt` vía la API con el
+  SA). Salida esperada: `HTTP 200`. El ns/deploy se pasan por env (sin default):
+  - PIVAS: `ROLLOUT_NS=pivas ROLLOUT_DEPLOY=pivas python3 rollout.py`
+  - Pulse: `ROLLOUT_NS=pulse ROLLOUT_DEPLOY=pulse python3 rollout.py`
 - **[dev]** Verificar que el pod nuevo quede listo:
-  `kubectl -n pivas rollout status deploy/pivas --timeout=180s`.
-- **[dev]** Pulse: `kubectl -n pulse rollout restart deploy/pulse` + `rollout status`
-  (el SA de Crew hoy solo cubre `pivas`; para hacer el rollout de Pulse desde Crew habría
-  que ampliar el RBAC).
+  `kubectl -n <ns> rollout status deploy/<deploy> --timeout=180s`.
+- El RBAC de Crew cubre `pivas` y `pulse`. Cotejo NO aplica aquí (despliega en AWS).
 
 ## Utilidad: reiniciar un caso de PIVAS (SOLO pruebas / homelab)  [dev]
 Borra evidencia/captura de un caso y lo deja en estado inicial. Requiere `ALLOW_CLAIM_RESET=true`.
