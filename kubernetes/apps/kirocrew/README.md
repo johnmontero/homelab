@@ -18,7 +18,7 @@ skills, lecciones, jobs) en el homelab usando la imagen oficial multi-arch
 | `deployment.yaml` | Deployment 1 réplica, `Recreate`, fijado a nodo amd64, seccomp `Unconfined` |
 | `service.yaml` | Service ClusterIP :5476 (solo útil con bind de red + token; ver abajo) |
 | `httproute.yaml` | HTTPRoute `crew.home.lab` → Service :5476 vía `homelab-gateway` (requiere bind + token) |
-| `rbac.yaml` | SA `kirocrew-deployer` + Role/RoleBinding para CI→rollout de PIVAS (ns `pivas`) |
+| `rbac.yaml` | SA `kirocrew-deployer` + Role/RoleBinding para CI→rollout (ns `pivas`, `pulse`, `kuska`) |
 | `login-shim-configmap.yaml` | Script del sidecar de auto-login (mintea token y redirige) |
 | `login-shim-service.yaml` | Service `kirocrew-login` :8088 (mismo pod, puerto del sidecar) |
 | `login-shim-httproute.yaml` | HTTPRoute `login.crew.home.lab` → shim :8088 |
@@ -264,16 +264,21 @@ subagente/MCP acotado por separado, 65% RAM por scope + slice agregado). Aquí s
 aviso. Para endurecer el fork-bomb se puede bajar el PID límite por-pod a nivel de nodo
 (`--kubelet-arg=pod-max-pids=N` en k3s); es un cambio de nodo, no del manifiesto.
 
-## CI → rollout de PIVAS (RBAC en `rbac.yaml`)
+## CI → rollout de apps del homelab (RBAC en `rbac.yaml`)
 
-Para que Crew dispare `kubectl rollout restart deploy/pivas` cuando el CI pase a
-`success`, `rbac.yaml` crea un acceso a la API de k8s **acotado al ns `pivas`** (no
-usa el kubeconfig de admin):
+Para que Crew dispare `kubectl rollout restart deploy/<app>` cuando el CI pase a
+`success`, `rbac.yaml` crea un acceso a la API de k8s **acotado por namespace** (no
+usa el kubeconfig de admin). Hay una Role+RoleBinding **por ns** (`pivas`, `pulse`,
+`kuska`); Cotejo NO aplica (despliega en AWS):
 
 - `ServiceAccount` `kirocrew-deployer` (ns `kirocrew`).
-- `Role` `pivas-rollout` (ns `pivas`): `patch`/`get`/`list`/`watch` de deployments +
+- `Role` `<app>-rollout` (ns de la app): `patch`/`get`/`list`/`watch` de deployments +
   lectura de replicasets/pods (para `rollout status`).
-- `RoleBinding` que une el Role al SA.
+- `RoleBinding` que une cada Role al SA.
+
+> Agregar una app nueva = duplicar el bloque Role+RoleBinding para su ns (el ns debe
+> existir para poder aplicar la Role). El rollout lo dispara la skill genérica
+> `rollout-homelab` con `ROLLOUT_NS=<ns> ROLLOUT_DEPLOY=<deploy>`.
 
 El Deployment ya referencia `serviceAccountName: kirocrew-deployer`, así que el token
 se auto-monta en el pod. Aplícalo:

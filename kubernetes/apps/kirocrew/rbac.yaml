@@ -1,6 +1,6 @@
 # RBAC mínimo para que Kiro Crew pueda reiniciar deploys del homelab tras CI verde.
-# Alcance: namespaces `pivas` y `pulse` (una Role+RoleBinding por ns). Sin permisos
-# de cluster. Cotejo NO aplica (despliega en AWS, no en el homelab).
+# Alcance: namespaces `pivas`, `pulse` y `kuska` (una Role+RoleBinding por ns). Sin
+# permisos de cluster. Cotejo NO aplica (despliega en AWS, no en el homelab).
 #
 # `kubectl rollout restart` = patch de una anotación en spec.template del Deployment.
 # `kubectl rollout status`  = lee deployments + replicasets + pods.
@@ -81,6 +81,41 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: pulse-rollout
+subjects:
+  - kind: ServiceAccount
+    name: kirocrew-deployer
+    namespace: kirocrew
+---
+# Mismo permiso para el ns `kuska` (rollout de Kuska tras CI verde).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kuska-rollout
+  namespace: kuska
+  labels:
+    app: kirocrew
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kirocrew-kuska-rollout
+  namespace: kuska
+  labels:
+    app: kirocrew
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kuska-rollout
 subjects:
   - kind: ServiceAccount
     name: kirocrew-deployer
