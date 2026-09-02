@@ -1,0 +1,32 @@
+# Ruta interna (LAN) por Envoy Gateway para health-check rápido en `home.lab`.
+# El acceso externo (si aplica) va por Cloudflare Tunnel. En :prod, Phoenix valida
+# el origen del WebSocket contra PHX_HOST; por eso kuska.home.lab sirve para GET /
+# (salud), pero el LiveView/WSS se prueba por el dominio público.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kuska
+  namespace: kuska
+spec:
+  hostnames:
+    - kuska.home.lab
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: homelab-gateway
+      namespace: default
+      sectionName: http
+  rules:
+    - backendRefs:
+        - group: ''
+          kind: Service
+          name: kuska-service
+          port: 4003
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+      timeouts:
+        backendRequest: 60s
+        request: 60s

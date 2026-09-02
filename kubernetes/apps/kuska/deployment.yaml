@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuska
+  namespace: kuska
+  labels:
+    app: kuska
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: kuska
+  strategy:
+    type: Recreate          # release de Phoenix; evita 2 versiones durante migración
+  template:
+    metadata:
+      labels:
+        app: kuska
+    spec:
+      # El clúster es mixto (ZimaBoard amd64 + Jetson arm64). La imagen de release
+      # se construye amd64, así que se fija al nodo amd64 (igual que postgres-dev/pulse).
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      # Migraciones antes de arrancar el server (Kuska.Release.migrate/0).
+      initContainers:
+        - name: migrate
+          image: ghcr.io/protecso-sac/kuska-fs:latest
+          imagePullPolicy: Always
+          command: ["sh", "-c", "bin=$(ls rel); ./rel/$bin/bin/$bin eval 'Kuska.Release.migrate()'"]
+          envFrom:
+            - secretRef:
+                name: kuska-env
+      containers:
+        - name: kuska
+          image: ghcr.io/protecso-sac/kuska-fs:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: kuska-env
+          ports:
+            - name: http
+              containerPort: 4003
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4003
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      # Imagen privada en GHCR: el pull secret `ghcr-creds` se adjunta al SA `default`
+      # del ns (ver README), igual que PIVAS/Pulse; por eso no se declara aquí.
