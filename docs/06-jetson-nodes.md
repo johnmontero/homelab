@@ -100,9 +100,33 @@ k3s trae su propio containerd. La runtime `nvidia` se registra con un drop-in
 - Reiniciar containerd/k3s-agent tras crear el drop-in:
   `sudo systemctl restart k3s-agent`.
 
+## GPU en contenedores — estado y limitación conocida (2026-09)
+
+| Aspecto | Estado |
+|---------|--------|
+| Anuncio `nvidia.com/gpu: 1` en los 5 Jetson | ✅ Funciona (device-plugin `Running`) |
+| `nvidia-container-runtime` + CSV L4T + drop-in containerd | ✅ Presentes en los 5 |
+| **Passthrough real a un contenedor** | ❌ **Falla** (ver abajo) |
+
+Un pod que pide `nvidia.com/gpu` con `runtimeClassName: nvidia` falla al crear el
+contenedor con:
+```
+nvidia-container-cli: device error: tegra: unknown device: unknown
+```
+Es el problema clásico de **Jetson/Tegra**: el device-plugin estándar pasa un device-ID
+que `nvidia-container-cli` intenta resolver como GPU discreta, inexistente en Tegra. Se
+probó `mode = "csv"` en `/etc/nvidia-container-runtime/config.toml` (nodo `jn4gb-01`) y
+**no** lo resolvió: el prestart hook sigue invocando `nvidia-container-cli`.
+
+**Pendiente (tarea aparte)** para habilitar GPU real: device-plugin Tegra-aware
+(`jetson-containers`) o inyección puramente por CSV sin el hook de `nvidia-container-cli`
+/ tuning de `NVIDIA_VISIBLE_DEVICES`. **No bloquea nada hoy**: las cargas normales usan
+`runc`; solo fallaría un pod que pida GPU explícitamente.
+
 ## Notas
 
 - Hoy las cargas de IA (Ollama/LocalAI/Kokoro) corren en el **ZimaBoard (CPU)**;
-  la GPU de los Jetson está **anunciada** pero aún sin consumidores.
+  la GPU de los Jetson está **anunciada** pero **no usable aún** en contenedores
+  (ver limitación arriba). Sin consumidores por ahora.
 - Reflasheo: JetPack 4.6.x (L4T R32.7.x) con SDK Manager/balenaEtcher; reinstalar
   `nvidia-container-runtime`, luego el k3s agent y el drop-in de containerd.
