@@ -58,6 +58,12 @@ spec:
       - effect: NoSchedule
         key: nvidia.com/gpu
         operator: Exists
+      # Los Jetson de 2GB llevan el taint tier=low:NoSchedule; el device-plugin
+      # debe tolerarlo para anunciar la GPU también en esos nodos.
+      - effect: NoSchedule
+        key: tier
+        value: low
+        operator: Equal
       volumes:
       - hostPath:
           path: /var/lib/kubelet/device-plugins

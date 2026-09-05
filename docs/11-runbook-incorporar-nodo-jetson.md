@@ -95,11 +95,36 @@ kubectl get node jnXgb-NN -o jsonpath='{.metadata.labels.board}/{.metadata.label
 
 Debe quedar `Ready`, `arm64`, kubelet `v1.30.14+k3s2`, con sus labels (y taint en 2GB).
 
-## 6. (Opcional) GPU y DNS
+## 6. (Opcional) Habilitar GPU Tegra
 
-- GPU Tegra: registrar la runtime `nvidia` en containerd — ver
-  [`06-jetson-nodes.md`](./06-jetson-nodes.md) (drop-in + `nvidia-device-plugin`).
-- DNS: agregar la reescritura `jnXgb-NN.home.lab → <IP>` en AdGuard.
+Solo si se van a correr cargas con GPU. Requiere 4 cosas (todas necesarias):
+
+1. **Runtime en el nodo** (JetPack la trae; si falta):
+   ```bash
+   command -v nvidia-container-runtime || sudo apt-get install -y nvidia-container-runtime
+   ```
+2. **Drop-in de containerd** (no tocar el `config.toml` de k3s):
+   `/var/lib/rancher/k3s/agent/etc/containerd/config.toml.d/nvidia.toml`
+   ```toml
+   [plugins."io.containerd.grpc.v1.cri".containerd.runtimes."nvidia"]
+     runtime_type = "io.containerd.runc.v2"
+   [plugins."io.containerd.grpc.v1.cri".containerd.runtimes."nvidia".options]
+     BinaryName = "/usr/bin/nvidia-container-runtime"
+   ```
+   Luego `sudo systemctl restart k3s-agent`.
+3. **Label** `hardware=jetson` (lo selecciona el device-plugin):
+   ```bash
+   kubectl label node jnXgb-NN hardware=jetson accelerator=nvidia-tegra --overwrite
+   ```
+4. **Toleration** al taint `tier=low` en el DaemonSet (ya incluida en
+   `kubernetes/platform/nvidia-device-plugin/daemonset.yaml`) — solo relevante para 2GB.
+
+> ⚠️ **Orden importante**: primero 1+2 en el nodo, DESPUÉS 3 (label). Si aplicas el
+> label antes de tener el drop-in, el pod del device-plugin entra en CrashLoopBackOff.
+
+## 7. DNS
+
+- Agregar la reescritura `jnXgb-NN.home.lab → <IP>` en AdGuard.
 
 ---
 
