@@ -5,14 +5,24 @@ k3s. Documentado para poder **reflashear/reinstalar** un nodo y reintegrarlo.
 
 ## Inventario
 
-| Nodo | IP | RAM | GPU | Rol k8s |
-|------|----|-----|-----|---------|
-| `jetson-4gb-01.home.lab` | 10.0.1.20 | 4 GB | 1× Tegra (Maxwell) | worker — postgres-prod |
-| `jetson-2gb-01.home.lab` | 10.0.1.21 | 2 GB | 1× Tegra | worker |
-| `jetson-2gb-02.home.lab` | 10.0.1.22 | 2 GB | 1× Tegra | worker |
+> Renombrado (2026-09): naming `jn{RAM}-{NN}` y nuevo esquema de IPs
+> (**4GB → 10.0.1.2x**, **2GB → 10.0.1.3x**). Los antiguos `jetson-*` (10.0.1.20/22/101)
+> quedaron obsoletos y se eliminaron del clúster.
 
-- Acceso: `ssh zb` (ZimaBoard) y desde ahí `ssh jetson-4gb-01.home.lab` (usuario
-  `devops`). Los Jetson **no** son alcanzables directamente desde fuera de la LAN.
+| Nodo | IP | RAM | Labels | Taint | Rol k8s |
+|------|----|-----|--------|-------|---------|
+| `jn4gb-01` | 10.0.1.21 | 4 GB | `board=jetson-nano, mem=4gb` | — | worker |
+| `jn4gb-02` | 10.0.1.22 | 4 GB | `board=jetson-nano, mem=4gb` | — | worker |
+| `jn2gb-01` | 10.0.1.31 | 2 GB | `board=jetson-nano, mem=2gb` | `tier=low:NoSchedule` | worker |
+| `jn2gb-02` | 10.0.1.32 | 2 GB | `board=jetson-nano, mem=2gb` | `tier=low:NoSchedule` | worker |
+| `jn2gb-03` | 10.0.1.33 | 2 GB | `board=jetson-nano, mem=2gb` | `tier=low:NoSchedule` | worker |
+
+- Todos `arm64`, kubelet **v1.30.14+k3s2**, agents de k3s. Control-plane: `zimaboard2` (10.0.1.1).
+- Los 2GB llevan taint `tier=low:NoSchedule` para aislarlos de la carga general
+  (solo cargas que lo toleren explícitamente). Los 4GB sin taint.
+- Acceso: `ssh zb` (ZimaBoard) y desde ahí `ssh devops@<IP>`. Los Jetson **no** son
+  alcanzables directamente desde fuera de la LAN (cuelgan del segmento del ZimaBoard).
+- Alta de un nodo nuevo: ver [`11-runbook-incorporar-nodo-jetson.md`](./11-runbook-incorporar-nodo-jetson.md).
 
 ## Resolución de nombres (DNS)
 
@@ -21,9 +31,14 @@ Los hostnames están registrados como **rewrites estáticos en AdGuard**
 
 | Dominio | Respuesta |
 |---------|-----------|
-| `jetson-4gb-01.home.lab` | `10.0.1.20` |
-| `jetson-2gb-01.home.lab` | `10.0.1.21` |
-| `jetson-2gb-02.home.lab` | `10.0.1.22` |
+| `jn4gb-01.home.lab` | `10.0.1.21` |
+| `jn4gb-02.home.lab` | `10.0.1.22` |
+| `jn2gb-01.home.lab` | `10.0.1.31` |
+| `jn2gb-02.home.lab` | `10.0.1.32` |
+| `jn2gb-03.home.lab` | `10.0.1.33` |
+
+> ⚠️ Pendiente: actualizar las reescrituras de AdGuard al nuevo naming/IPs (arriba).
+> Las entradas viejas `jetson-*` deben eliminarse.
 
 > **Alcanzabilidad (importante):** el DNS resuelve desde toda la LAN, pero los
 > Jetson **solo son accesibles desde el ZimaBoard** (SSH/TCP abierto). Desde la
